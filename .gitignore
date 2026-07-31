@@ -6,7 +6,7 @@ __pycache__/
 venv/
 
 # Factory runtime artifacts
-backlog.json
+.factory/
 BLOCKER.md
 factory.log
 *.lock
