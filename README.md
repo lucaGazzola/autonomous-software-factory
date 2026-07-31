@@ -47,7 +47,7 @@ The result is a `factory.yaml` in the project root. Re-run with
 | `backlog` | The JSON task backlog (keep it outside the repo). |
 | `blocker_file` | Where `BLOCKER.md` is written (keep it outside the repo). |
 | `agent_command` | The coding agent: any shell command (string or argv list). |
-| `agent_timeout_seconds` | Kill the agent after this many seconds. |
+| `agent_timeout_seconds` | Optional: kill the agent after this many seconds. Omit for no timeout (default) — a run that overruns the interval just skips the next iteration. |
 | `agent_env` | Extra environment variables for the agent process. |
 | `blocked_exit_code` | Exit code that means "needs human input" (default `2`). |
 | `refactor_prompt` | Instruction used when the backlog is empty. |
@@ -77,6 +77,16 @@ The exit code decides the outcome:
   refactoring block).
 * anything else — error: the agent's changes are discarded and the task is
   marked `FAILED`.
+
+### Overlapping runs
+
+Only one agent run happens at a time per factory. A per-run lock (a `.run`
+file next to the backlog) is held while a cycle runs; if the agent is still
+working when the next iteration wakes up, that iteration is skipped and the
+running agent is left alone — the factory never starts a second agent on the
+same repository and never kills a long-running agent. Set
+`agent_timeout_seconds` only if you want a stuck agent to be killed as an
+escape hatch.
 
 ## The backlog
 

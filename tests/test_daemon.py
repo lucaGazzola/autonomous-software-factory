@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from factory.daemon import FactoryDaemon, acquire_run_lock
+from factory.daemon import FactoryDaemon, RunLock, acquire_run_lock
 from tests.conftest import make_config
 
 
@@ -29,6 +29,7 @@ class FakeFactory:
 def make_daemon(git_repo, tmp_path, interval=1, **overrides) -> FactoryDaemon:
     config = make_config(git_repo, tmp_path, interval_minutes=interval, **overrides)
     return FactoryDaemon(config, FakeFactory())
+
 
 async def test_daemon_runs_cycles_on_interval(git_repo, tmp_path):
     daemon = make_daemon(git_repo, tmp_path)
@@ -68,3 +69,38 @@ def test_run_lock_is_exclusive(tmp_path):
     assert acquire_run_lock(lock_path) is None
     first.close()
     assert acquire_run_lock(lock_path) is not None
+
+
+def test_run_lock_held_while_active(tmp_path):
+    lock_path = tmp_path / "factory.run"
+    first = RunLock(lock_path)
+    second = RunLock(lock_path)
+    with first.held() as acquired:
+        assert acquired is True
+        with second.held() as blocked:
+            assert blocked is False
+    with second.held() as again:
+        assert again is True
+
+
+async def test_daemon_skips_when_previous_run_active(git_repo, tmp_path):
+    daemon = make_daemon(git_repo, tmp_path)
+    daemon.interval_seconds = 0.01
+    lock = RunLock(daemon.run_lock.lock_path)
+    with lock.held():
+        task = asyncio.create_task(daemon.run_forever())
+        await asyncio.sleep(0.1)
+        daemon.stop()
+        await asyncio.wait_for(task, timeout=5)
+    assert daemon.factory.cycles == 0
+
+
+async def test_daemon_runs_after_run_lock_released(git_repo, tmp_path):
+    daemon = make_daemon(git_repo, tmp_path)
+    daemon.interval_seconds = 0.01
+    task = asyncio.create_task(daemon.run_forever())
+    while daemon.factory.cycles == 0:
+        await asyncio.sleep(0.01)
+    daemon.stop()
+    await asyncio.wait_for(task, timeout=5)
+    assert daemon.factory.cycles >= 1

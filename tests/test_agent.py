@@ -42,6 +42,12 @@ async def test_timeout_is_error():
     assert "timed out" in (result.error or "")
 
 
+async def test_no_timeout_runs_to_completion():
+    agent = ShellAgent("sleep 0.2", timeout_seconds=None)
+    result = await agent.run_task(TASK, RepoContext())
+    assert result.status is ExecutionStatus.SUCCESS
+
+
 async def test_argv_list_command(tmp_path):
     agent = ShellAgent(["sh", "-c", "exit 2"])
     result = await agent.run_task(TASK, RepoContext())

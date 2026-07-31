@@ -2,7 +2,10 @@
 
 Wakes up every ``interval_minutes``, runs one cycle of the :class:`Factory`,
 and sleeps. A lock file prevents two daemons from running on the same
-factory. Everything else is logged to the configured log file.
+factory. A per-run lock prevents two agents from ever working on the same
+repository at the same time: when a run is still in progress at the next
+wake-up, that iteration is skipped instead of killing the running agent.
+Everything else is logged to the configured log file.
 """
 
 from __future__ import annotations
@@ -10,6 +13,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -19,12 +24,12 @@ from factory.models import FactoryConfig
 logger = logging.getLogger(__name__)
 
 
-def acquire_run_lock(lock_path: str | Path) -> Any:
-    """Take an exclusive, non-blocking lock; returns the handle or ``None``.
+def _take_flock(lock_path: str | Path) -> Any | None:
+    """Open the lock file and take a non-blocking exclusive flock.
 
     Uses ``fcntl`` flock so the lock is released automatically when the
-    process exits (even on crash). Returns ``None`` when another daemon
-    holds the lock.
+    process exits (even on crash). Returns ``None`` when another process
+    holds the lock. Falls back to no locking when ``fcntl`` is unavailable.
     """
     lock_file = Path(lock_path)
     lock_file.parent.mkdir(parents=True, exist_ok=True)
@@ -44,6 +49,38 @@ def acquire_run_lock(lock_path: str | Path) -> Any:
     return handle
 
 
+def acquire_run_lock(lock_path: str | Path) -> Any:
+    """Take an exclusive, non-blocking lock; returns the handle or ``None``.
+
+    The lock is released automatically when the process exits (even on
+    crash). Returns ``None`` when another daemon holds the lock.
+    """
+    return _take_flock(lock_path)
+
+
+class RunLock:
+    """Per-iteration lock: one agent run at a time per factory.
+
+    Held for the duration of one cycle so that a run still in progress (an
+    overlong agent, an orphaned process after a daemon restart) makes the
+    next iteration skip instead of starting a second agent on the same
+    repository.
+    """
+
+    def __init__(self, lock_path: str | Path) -> None:
+        self.lock_path = Path(lock_path)
+
+    @contextmanager
+    def held(self) -> Iterator[bool]:
+        """Acquire for the duration of the block; yields True when acquired."""
+        handle = _take_flock(self.lock_path)
+        try:
+            yield handle is not None
+        finally:
+            if handle is not None:
+                handle.close()
+
+
 class FactoryDaemon:
     """Runs :class:`Factory` cycles on a fixed schedule until stopped."""
 
@@ -51,6 +88,7 @@ class FactoryDaemon:
         self.config = config
         self.factory = factory
         self.interval_seconds: float = config.interval_minutes * 60.0
+        self.run_lock = RunLock(config.backlog.with_suffix(".run"))
         self._stop_event = asyncio.Event()
 
     def stop(self) -> None:
@@ -68,7 +106,12 @@ class FactoryDaemon:
         )
         while not self._stop_event.is_set():
             try:
-                outcome = await self.factory.run_cycle()
+                with self.run_lock.held() as acquired:
+                    if not acquired:
+                        logger.info("Previous run still in progress; skipping this iteration.")
+                        outcome = "skipped"
+                    else:
+                        outcome = await self.factory.run_cycle()
                 logger.info("Run finished: %s", outcome)
             except Exception:
                 logger.exception("Run crashed; continuing on the next interval.")

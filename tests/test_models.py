@@ -26,6 +26,7 @@ def test_config_defaults():
     assert config.interval_minutes == 60
     assert config.branch == "main"
     assert config.blocked_exit_code == 2
+    assert config.agent_timeout_seconds is None
     assert config.refactor_prompt == DEFAULT_REFACTOR_PROMPT
 
 

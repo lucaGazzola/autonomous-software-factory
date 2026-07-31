@@ -84,7 +84,9 @@ class FactoryConfig(BaseModel):
             agent. Exit 0 = success, ``blocked_exit_code`` = needs human
             input, anything else = error. The task is available to the
             process as the ``FACTORY_TASK`` environment variable.
-        agent_timeout_seconds: Kill the agent process after this many seconds.
+        agent_timeout_seconds: Kill the agent process after this many seconds
+            (``None`` = never; a run that overruns the interval simply makes
+            the next iteration skip).
         agent_env: Extra environment variables for the agent process.
         blocked_exit_code: Exit code the agent uses to signal that it needs
             human input.
@@ -102,7 +104,7 @@ class FactoryConfig(BaseModel):
     backlog: Path = Field(default=Path("backlog.json"))
     blocker_file: Path = Field(default=Path("BLOCKER.md"))
     agent_command: str | list[str]
-    agent_timeout_seconds: float = Field(default=1800.0, gt=0)
+    agent_timeout_seconds: float | None = Field(default=None, gt=0)
     agent_env: dict[str, str] = Field(default_factory=dict)
     blocked_exit_code: int = Field(default=2)
     remote: str | None = None

@@ -19,7 +19,9 @@ blocker_file: BLOCKER.md        # Written with a detailed explanation when the a
 #   2 = needs human input   (BLOCKER.md is written; factory pauses)
 #   other = error           (work is discarded, task marked FAILED)
 agent_command: "aider --message \"$FACTORY_TASK\""
-agent_timeout_seconds: 1800
+# agent_timeout_seconds: 3600   # Optional escape hatch: kill a stuck agent after
+                                # this many seconds. Omitted = never kill; an
+                                # overlong run just skips the next iteration.
 agent_env: {}                 # Extra environment variables for the agent process.
 blocked_exit_code: 2
 

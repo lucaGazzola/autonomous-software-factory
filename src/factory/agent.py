@@ -45,7 +45,7 @@ class ShellAgent(BaseAgent):
         self,
         command: str | list[str],
         *,
-        timeout_seconds: float = 1800.0,
+        timeout_seconds: float | None = None,
         env: dict[str, str] | None = None,
         blocked_exit_code: int = 2,
     ) -> None:
@@ -107,14 +107,12 @@ class ShellAgent(BaseAgent):
         except TimeoutError:
             proc.kill()
             await proc.wait()
-            logs.append(
-                f"[{self.name}] Execution timed out after "
-                f"{self.timeout_seconds:g}s; process killed."
-            )
+            label = f" after {self.timeout_seconds:g}s" if self.timeout_seconds is not None else ""
+            logs.append(f"[{self.name}] Execution timed out{label}; process killed.")
             return ExecutionResult(
                 status=ExecutionStatus.ERROR,
                 output_logs=logs,
-                error=f"timed out after {self.timeout_seconds:g}s",
+                error=f"timed out{label}",
             )
 
         logs.extend(f"[stdout] {line}" for line in stdout.decode(errors="replace").splitlines())
