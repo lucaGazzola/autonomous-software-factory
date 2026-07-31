@@ -10,6 +10,29 @@ A scheduled software factory for one repository. Every `interval_minutes` it:
    a detailed explanation of what you must do, and pauses until you resolve
    it.
 
+## The backlog
+
+A plain JSON file, editable by hand:
+
+```json
+{
+  "tasks": [
+    {
+      "id": "TASK-001",
+      "title": "Implement fibonacci module",
+      "description": "Write a fibonacci module with memoization and tests.",
+      "status": "OPEN",
+      "created_at": "2026-07-31T10:00:00Z"
+    }
+  ]
+}
+```
+
+Statuses: `OPEN` (to be picked), `BLOCKED` (waiting on you), `COMPLETED`,
+`FAILED`. Edit the file directly to add, remove, or reopen tasks.
+
+Give this spec to your favorite llm and create a backlog for the application you want to build!
+
 ## Quick start
 
 ```bash
@@ -87,27 +110,6 @@ running agent is left alone — the factory never starts a second agent on the
 same repository and never kills a long-running agent. Set
 `agent_timeout_seconds` only if you want a stuck agent to be killed as an
 escape hatch.
-
-## The backlog
-
-A plain JSON file, editable by hand:
-
-```json
-{
-  "tasks": [
-    {
-      "id": "TASK-001",
-      "title": "Implement fibonacci module",
-      "description": "Write a fibonacci module with memoization and tests.",
-      "status": "OPEN",
-      "created_at": "2026-07-31T10:00:00Z"
-    }
-  ]
-}
-```
-
-Statuses: `OPEN` (to be picked), `BLOCKED` (waiting on you), `COMPLETED`,
-`FAILED`. Edit the file directly to add, remove, or reopen tasks.
 
 ## BLOCKER
 
