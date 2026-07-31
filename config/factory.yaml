@@ -1,0 +1,24 @@
+# Software Factory sample configuration.
+# Every setting here is a default; CLI flags override it (see `factory run --help`).
+
+backlog:
+  path: backlog.json        # Path to the JSON task backlog (created with sample tasks if missing).
+
+repo:
+  path: .                   # Working directory handed to agents as RepoContext.repo_path.
+  branch: main
+
+agent:
+  name: mock                # mock | shell
+  command: null             # Shell command (string or list) — required when agent: shell.
+  timeout_seconds: 300
+  workdir: null             # Optional; defaults to repo path.
+  env: {}                   # Extra environment variables for the agent process.
+
+orchestrator:
+  max_retries: 3            # Extra executions allowed after a task blocks before it fails.
+  poll_interval_seconds: 5  # Idle poll delay when the backlog is empty.
+
+feedback:
+  provider: console         # console | webhook
+  webhook_url: null         # URL for the webhook notifier placeholder.

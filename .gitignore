@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Factory runtime artifacts
+backlog.json
+artifacts/
+.factory/
+
+# Tooling
+.pytest_cache/
+.coverage
+htmlcov/
+.ruff_cache/
