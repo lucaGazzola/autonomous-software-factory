@@ -5,12 +5,12 @@ build-backend = "hatchling.build"
 [project]
 name = "software-factory"
 version = "0.1.0"
-description = "Agent-agnostic Software Factory: automated software development from a backlog with pluggable coding agents and human-in-the-loop fallback."
+description = "A scheduled software factory: executes backlog tasks on main, refactors when idle, and writes BLOCKER.md when it needs human input."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [{ name = "Software Factory Contributors" }]
-keywords = ["automation", "agents", "backlog", "orchestration", "hitl"]
+keywords = ["automation", "agents", "backlog", "orchestration", "scheduler"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
@@ -31,7 +31,6 @@ dependencies = [
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
-    "pytest-cov>=5.0",
     "ruff>=0.5",
 ]
 llm = [
@@ -39,7 +38,7 @@ llm = [
 ]
 
 [project.scripts]
-factory = "factory.cli.main:main"
+factory = "factory.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/factory"]

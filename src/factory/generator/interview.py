@@ -24,8 +24,8 @@ from rich.markup import escape
 from rich.panel import Panel
 from rich.prompt import Prompt
 
-from factory.core.llm import LiteLLMClient, LLMClient, LLMError  # noqa: F401  (re-exported)
 from factory.generator.prompts import GRILLING_SYSTEM_PROMPT
+from factory.llm import LiteLLMClient, LLMClient, LLMError  # noqa: F401  (re-exported)
 
 #: Spec areas the interview must cover before the session suggests wrapping up.
 CRITICAL_TOPICS: tuple[str, ...] = ("Data", "API", "Security", "UX", "Testing")

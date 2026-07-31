@@ -7,8 +7,9 @@ venv/
 
 # Factory runtime artifacts
 backlog.json
-artifacts/
-.factory/
+BLOCKER.md
+factory.log
+*.lock
 
 # Tooling
 .pytest_cache/

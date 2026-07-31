@@ -1,32 +1,23 @@
-"""Software Factory: agent-agnostic software development automation with human-in-the-loop."""
+"""Software Factory: a scheduled software factory that executes backlog tasks
+on the main branch and refactors when idle."""
 
 __version__ = "0.1.0"
 
-from factory.core.models import (
-    AgentConfig,
+from factory.models import (
     ExecutionResult,
     ExecutionStatus,
-    GitConfig,
-    ProjectConfig,
-    RefactoringConfig,
+    FactoryConfig,
     RepoContext,
-    ResponseAction,
     Task,
     TaskStatus,
-    UserResponse,
 )
 
 __all__ = [
-    "AgentConfig",
     "ExecutionResult",
     "ExecutionStatus",
-    "GitConfig",
-    "ProjectConfig",
-    "RefactoringConfig",
+    "FactoryConfig",
     "RepoContext",
-    "ResponseAction",
     "Task",
     "TaskStatus",
-    "UserResponse",
     "__version__",
 ]

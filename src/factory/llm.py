@@ -1,10 +1,4 @@
-"""Minimal LLM chat-completion client shared by the factory's AI components.
-
-Only two things are required of an LLM backend: send a chat message list and
-return the assistant's text (optionally in JSON mode). The generator's
-interview/decomposition pipeline and the refactoring scanner both speak this
-``LLMClient`` protocol, so tests can inject a scripted fake.
-"""
+"""Minimal LLM chat-completion client used by the backlog generator."""
 
 from __future__ import annotations
 

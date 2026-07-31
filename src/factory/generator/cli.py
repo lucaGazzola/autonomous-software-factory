@@ -1,7 +1,7 @@
 """CLI entry point for ``factory generate-backlog``.
 
 Runs the full pipeline: interactive interview -> LLM decomposition -> writes a
-validated, topologically ordered backlog through the ``JSONBacklogAdapter``.
+validated, topologically ordered backlog through the ``JSONBacklog``.
 Ctrl+C anywhere during the interview saves progress to
 ``artifacts/interview_progress.json`` and exits cleanly.
 """
@@ -18,10 +18,10 @@ from rich.panel import Panel
 from rich.prompt import Prompt
 from rich.table import Table
 
-from factory.adapters.backlog import JSONBacklogAdapter
-from factory.core.models import Task
+from factory.backlog import JSONBacklog
 from factory.generator.decomposer import DecompositionError, TaskDecomposer
 from factory.generator.interview import InterviewSession, LiteLLMClient, LLMError
+from factory.models import Task
 
 DEFAULT_PROGRESS_PATH = Path("artifacts/interview_progress.json")
 
@@ -36,7 +36,7 @@ def resolve_model(args) -> str:
 async def _count_tasks(path: Path) -> int:
     """Number of tasks already stored in the backlog file (0 when absent)."""
     try:
-        return len(await JSONBacklogAdapter(path).list_tasks())
+        return len(await JSONBacklog(path).list_tasks())
     except OSError:
         return 0
 
@@ -45,7 +45,7 @@ async def _populate(path: Path, tasks: list[Task], force: bool) -> int:
     """Persist the generated tasks, atomically replacing the file under ``force``."""
     if force:
         path.unlink(missing_ok=True)
-    adapter = JSONBacklogAdapter(path)
+    adapter = JSONBacklog(path)
     for task in tasks:
         await adapter.create_task(task)
     return len(tasks)

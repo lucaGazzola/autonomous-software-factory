@@ -1,0 +1,121 @@
+"""The backlog: a single human-readable JSON file of tasks.
+
+The factory pulls the oldest ``OPEN`` task from here. Edit this file
+directly to add, remove, or reopen tasks (e.g. set a ``BLOCKED`` task back
+to ``OPEN`` once the human input has been provided). Writes are atomic and
+serialized through an asyncio lock.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import os
+import tempfile
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
+
+from pydantic import ValidationError
+
+from factory.models import Task, TaskStatus
+
+_EMPTY_STORE: dict[str, Any] = {"tasks": []}
+
+
+class JSONBacklog:
+    """A backlog stored in a single JSON document on disk."""
+
+    def __init__(self, path: str | Path) -> None:
+        self.path = Path(path)
+        self._lock = asyncio.Lock()
+
+    async def list_tasks(self) -> list[Task]:
+        """Return all tasks, in the order they were created."""
+        store = await self._read()
+        return [self._to_task(entry) for entry in store["tasks"]]
+
+    async def fetch_next_task(self) -> Task | None:
+        """Return the oldest OPEN task, or ``None`` when there is none."""
+        tasks = await self.list_tasks()
+        open_tasks = [t for t in tasks if t.status is TaskStatus.OPEN]
+        if not open_tasks:
+            return None
+        return min(open_tasks, key=lambda t: t.created_at)
+
+    async def get_task(self, task_id: str) -> Task | None:
+        """Return a task by id, or ``None`` if it does not exist."""
+        store = await self._read()
+        for entry in store["tasks"]:
+            if entry["id"] == task_id:
+                return self._to_task(entry)
+        return None
+
+    async def create_task(self, task: Task) -> Task:
+        """Persist ``task``, rejecting duplicate ids with a ``ValueError``."""
+        async with self._lock:
+            store = await self._read()
+            if any(entry["id"] == task.id for entry in store["tasks"]):
+                raise ValueError(f"Task id already exists in backlog: {task.id!r}")
+            store["tasks"].append(task.model_dump(mode="json"))
+            await self._write(store)
+        return task
+
+    async def update_status(self, task_id: str, status: TaskStatus) -> Task | None:
+        """Transition a task's status, bumping its ``updated_at`` timestamp."""
+        async with self._lock:
+            store = await self._read()
+            updated: Task | None = None
+            for entry in store["tasks"]:
+                if entry["id"] == task_id:
+                    entry["status"] = status.value
+                    entry["updated_at"] = datetime.now(UTC).isoformat()
+                    updated = self._to_task(entry)
+                    break
+            if updated is not None:
+                await self._write(store)
+        return updated
+
+    # ------------------------------------------------------------------ #
+    # Internal persistence helpers                                        #
+    # ------------------------------------------------------------------ #
+
+    async def _read(self) -> dict[str, Any]:
+        """Load the store from disk, tolerating a missing or corrupt file."""
+        if not self.path.exists():
+            return {"tasks": []}
+        try:
+            data = json.loads(self.path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            return {"tasks": []}
+        if not isinstance(data, dict):
+            return {"tasks": []}
+        return {"tasks": data.get("tasks", []) if isinstance(data.get("tasks"), list) else []}
+
+    async def _write(self, store: dict[str, Any]) -> None:
+        """Atomically persist the store (temp file + rename)."""
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp_name = tempfile.mkstemp(
+            dir=self.path.parent, prefix=f".{self.path.name}.", suffix=".tmp"
+        )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                json.dump(store, handle, indent=2, ensure_ascii=False)
+                handle.write("\n")
+            os.replace(tmp_name, self.path)
+        except BaseException:
+            if os.path.exists(tmp_name):
+                os.unlink(tmp_name)
+            raise
+
+    @staticmethod
+    def _to_task(entry: dict[str, Any]) -> Task:
+        """Validate a stored dictionary back into a Task, skipping corrupt rows."""
+        try:
+            return Task.model_validate(entry)
+        except ValidationError:
+            return Task(
+                id=str(entry.get("id", "<unknown>")),
+                title="<unparsable task>",
+                status=TaskStatus.FAILED,
+            )

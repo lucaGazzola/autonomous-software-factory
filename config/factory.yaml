@@ -1,24 +1,34 @@
-# Software Factory sample configuration.
-# Every setting here is a default; CLI flags override it (see `factory run --help`).
+# Software Factory configuration.
+# Everything is one flat file; relative paths resolve against this file's directory.
+# Copy to your factory directory and run `factory start --config factory.yaml`.
 
-backlog:
-  path: backlog.json        # Path to the JSON task backlog (created with sample tasks if missing).
+name: my-factory                # Display name used in logs and commit messages.
+repo: /path/to/repository       # The git repository the factory works on.
+interval_minutes: 60            # How often the factory runs.
+branch: main                    # Everything is committed to this branch (no feature branches).
+remote: origin                  # Git remote to push to; omit to only commit locally.
 
-repo:
-  path: .                   # Working directory handed to agents as RepoContext.repo_path.
-  branch: main
+backlog: backlog.json           # The task backlog (created on first use). Keep it
+                                # outside the repository so it is never committed.
+blocker_file: BLOCKER.md        # Written with a detailed explanation when the agent
+                                # needs human input. Keep it outside the repository.
 
-agent:
-  name: mock                # mock | shell
-  command: null             # Shell command (string or list) — required when agent: shell.
-  timeout_seconds: 300
-  workdir: null             # Optional; defaults to repo path.
-  env: {}                   # Extra environment variables for the agent process.
+# The coding agent: any shell command. Read $FACTORY_TASK for the task, work in the
+# repo directory, and exit with:
+#   0 = success             (work is committed and pushed)
+#   2 = needs human input   (BLOCKER.md is written; factory pauses)
+#   other = error           (work is discarded, task marked FAILED)
+agent_command: "aider --message \"$FACTORY_TASK\""
+agent_timeout_seconds: 1800
+agent_env: {}                 # Extra environment variables for the agent process.
+blocked_exit_code: 2
 
-orchestrator:
-  max_retries: 3            # Extra executions allowed after a task blocks before it fails.
-  poll_interval_seconds: 5  # Idle poll delay when the backlog is empty.
+# Instruction used when the backlog has no runnable task: the factory refactors.
+refactor_prompt: |
+  Review the codebase for improvement opportunities that do not change
+  behavior: dead code, duplication, overly complex functions, missing
+  tests, outdated comments. Apply the safe improvements you find and run
+  the test suite to verify nothing broke. If nothing needs refactoring,
+  make no changes.
 
-feedback:
-  provider: console         # console | webhook
-  webhook_url: null         # URL for the webhook notifier placeholder.
+log_file: factory.log

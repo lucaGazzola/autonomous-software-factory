@@ -21,9 +21,9 @@ from typing import Any
 
 from pydantic import BaseModel, Field, ValidationError
 
-from factory.core.models import Task
 from factory.generator.interview import LLMClient
 from factory.generator.prompts import DECOMPOSITION_SYSTEM_PROMPT
+from factory.models import Task
 
 _JSON_FENCE_RE = re.compile(r"```(?:json)?\s*(.*?)```", re.DOTALL | re.IGNORECASE)
 
