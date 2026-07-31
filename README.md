@@ -122,22 +122,8 @@ When the agent exits with `blocked_exit_code`, the factory writes
 
 The factory stays paused while `BLOCKER.md` exists.
 
-## Backlog generator
-
-Have an idea but no backlog? `factory generate-backlog` interviews you with
-an LLM "Product Architect" and turns the agreed spec into an ordered backlog:
-
-```bash
-pip install -e ".[llm]"                  # LLM backend (litellm)
-export FACTORY_LLM_MODEL=gpt-4o          # optional; defaults to gpt-4o
-factory generate-backlog -p "File conversion web app"
-```
-
-Reply normally, or type `/done` to finish early. Ctrl+C saves your interview
-to `artifacts/interview_progress.json`.
-
 ## Develop
 
 ```bash
-pytest   # backlog, git, agent, factory cycles, daemon, generator
+pytest   # backlog, git, agent, factory cycles, daemon
 ```

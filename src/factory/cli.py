@@ -9,10 +9,8 @@ Commands:
 * ``factory start --config factory.yaml`` — run the scheduled factory on one
   repository. Every ``interval_minutes`` it picks an ``OPEN`` task from the
   backlog, or runs a refactoring pass when the backlog is empty; everything
-  is committed and pushed on the main branch. When the agent needs human
-  input, a detailed ``BLOCKER.md`` file is written with what you must do.
-* ``factory generate-backlog`` — interview a product idea and turn it into a
-  backlog of tasks for the factory.
+   is committed and pushed on the main branch. When the agent needs human
+   input, a detailed ``BLOCKER.md`` file is written with what you must do.
 """
 
 from __future__ import annotations
@@ -75,22 +73,6 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=None,
         help="Override the schedule interval from the config file.",
-    )
-
-    gen_parser = sub.add_parser(
-        "generate-backlog", help="Interview a product idea and generate an executable backlog."
-    )
-    gen_parser.add_argument(
-        "--prompt", "-p", default=None, help="Initial product idea (prompted if omitted)."
-    )
-    gen_parser.add_argument(
-        "--output", "-o", type=Path, default=Path("backlog.json"), help="Backlog file to write."
-    )
-    gen_parser.add_argument(
-        "--model", default=None, help="LLM model (overrides FACTORY_LLM_MODEL)."
-    )
-    gen_parser.add_argument(
-        "--force", action="store_true", help="Replace an existing backlog file."
     )
     return parser
 
@@ -210,10 +192,6 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_start(args)
     if args.action == "init":
         return cmd_init(args)
-    if args.action == "generate-backlog":
-        from factory.generator.cli import cmd_generate_backlog
-
-        return cmd_generate_backlog(args)
     parser.error(f"unknown command: {args.action}")
     return 2
 
