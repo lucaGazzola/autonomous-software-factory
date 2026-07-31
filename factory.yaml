@@ -10,7 +10,7 @@ backlog: .factory/backlog.json
 blocker_file: .factory/BLOCKER.md
 
 agent_command: >
-  opencode run "Work on the repository at the current working directory.
+  opencode run --auto "Work on the repository at the current working directory.
   Make the code changes requested below and nothing else. Do NOT run
   git commit, git push, or git add -A — the factory commits your work
   itself. Verify with the test suite where applicable.
