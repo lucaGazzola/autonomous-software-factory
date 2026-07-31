@@ -14,11 +14,26 @@ A scheduled software factory for one repository. Every `interval_minutes` it:
 
 ```bash
 pip install -e ".[dev]"
-cp config/factory.yaml .        # edit repo, agent_command, interval...
-factory start --config factory.yaml
+factory init          # guided setup: folder, agent command, refactor prompt
+factory start
 ```
 
-The factory wakes up every `interval_minutes`, and logs to `factory.log`.
+Running `factory` or `factory start` without a `factory.yaml` triggers the
+guided setup automatically. The factory wakes up every `interval_minutes`,
+and logs to `factory.log`.
+
+## First run (`factory init`)
+
+`factory init` walks you through the three decisions the factory needs:
+
+| Question | Meaning |
+| --- | --- |
+| Factory folder | Where the backlog, `BLOCKER.md` and the log live (default `.factory/`, inside the project). It is added to `.gitignore` so the factory never commits its own bookkeeping. |
+| Coding agent command | Any shell command; the task arrives as the `FACTORY_TASK` environment variable, e.g. `claude -p "$FACTORY_TASK"`. |
+| Refactor prompt | Instruction used when the backlog is empty. The default is offered; answer `n` to paste your own (empty line finishes). |
+
+The result is a `factory.yaml` in the project root. Re-run with
+`factory init --force` to regenerate it.
 
 ## The config (`factory.yaml`)
 
