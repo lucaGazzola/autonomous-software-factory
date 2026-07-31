@@ -16,3 +16,4 @@ factory.log
 .coverage
 htmlcov/
 .ruff_cache/
+.idea/
