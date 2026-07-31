@@ -15,17 +15,16 @@ environment variable). Tests inject a scripted fake client instead.
 from __future__ import annotations
 
 import json
-import os
 import re
 from collections.abc import Callable
 from pathlib import Path
-from typing import Protocol
 
 from rich.console import Console
 from rich.markup import escape
 from rich.panel import Panel
 from rich.prompt import Prompt
 
+from factory.core.llm import LiteLLMClient, LLMClient, LLMError  # noqa: F401  (re-exported)
 from factory.generator.prompts import GRILLING_SYSTEM_PROMPT
 
 #: Spec areas the interview must cover before the session suggests wrapping up.
@@ -35,8 +34,19 @@ CRITICAL_TOPICS: tuple[str, ...] = ("Data", "API", "Security", "UX", "Testing")
 TOPIC_KEYWORDS: dict[str, tuple[str, ...]] = {
     "Data": ("data", "storage", "database", "db", "schema", "sqlite", "postgres", "model"),
     "API": ("api", "endpoint", "rest", "graphql", "cli", "integration"),
-    "Security": ("security", "auth", "authentication", "authorization", "login", "password",
-                 "jwt", "oauth", "secret", "permission", "sso"),
+    "Security": (
+        "security",
+        "auth",
+        "authentication",
+        "authorization",
+        "login",
+        "password",
+        "jwt",
+        "oauth",
+        "secret",
+        "permission",
+        "sso",
+    ),
     "UX": ("ux", "ui", "user interface", "user experience", "frontend", "design", "accessibility"),
     "Testing": ("test", "testing", "qa", "verification", "test suite", "pytest"),
 }
@@ -44,10 +54,28 @@ TOPIC_KEYWORDS: dict[str, tuple[str, ...]] = {
 #: Phrases that terminate the interview (normalized: lowercased, stripped).
 EXIT_PHRASES: frozenset[str] = frozenset(
     {
-        "done", "exit", "quit", "stop", "end", "enough", "that's enough", "that's all",
-        "finalize", "proceed", "wrap it up", "build it", "lets build it", "let's build it",
-        "start building", "move on", "good enough",
-        "/done", "/exit", "/quit", "/stop", "/end",
+        "done",
+        "exit",
+        "quit",
+        "stop",
+        "end",
+        "enough",
+        "that's enough",
+        "that's all",
+        "finalize",
+        "proceed",
+        "wrap it up",
+        "build it",
+        "lets build it",
+        "let's build it",
+        "start building",
+        "move on",
+        "good enough",
+        "/done",
+        "/exit",
+        "/quit",
+        "/stop",
+        "/end",
     }
 )
 
@@ -60,49 +88,6 @@ Anything else is treated as an answer to the current question.
 
 #: Lines of the form "Recommendation: ..." get dedicated styling in the UI.
 RECOMMENDATION_RE = re.compile(r"^\s*(?:\*\*)?[Rr]ecommendation[^\n:]*:\s*(.+)$", re.MULTILINE)
-
-
-class LLMError(RuntimeError):
-    """Raised when the LLM backend cannot produce a response."""
-
-
-class LLMClient(Protocol):
-    """Minimal chat-completion contract used by the generator components."""
-
-    def complete(self, messages: list[dict[str, str]], *, json_mode: bool = False) -> str:
-        """Send ``messages`` and return the assistant's text reply."""
-        ...
-
-
-class LiteLLMClient:
-    """``LLMClient`` backed by the litellm SDK (OpenAI, Anthropic, ...).
-
-    Args:
-        model: Model name; falls back to the ``FACTORY_LLM_MODEL`` environment
-            variable and finally to ``gpt-4o``.
-    """
-
-    def __init__(self, model: str | None = None) -> None:
-        self.model = model or os.environ.get("FACTORY_LLM_MODEL", "gpt-4o")
-
-    def complete(self, messages: list[dict[str, str]], *, json_mode: bool = False) -> str:
-        try:
-            import litellm
-        except ImportError as exc:
-            raise LLMError(
-                "The LLM backend requires litellm: `pip install 'software-factory[llm]'`"
-            ) from exc
-        kwargs: dict = {"model": self.model, "messages": messages, "temperature": 0.4}
-        if json_mode:
-            kwargs["response_format"] = {"type": "json_object"}
-        try:
-            response = litellm.completion(**kwargs)
-        except Exception as exc:  # SDK raises a grab-bag of provider errors.
-            raise LLMError(f"LLM call to {self.model!r} failed: {exc}") from exc
-        content = response.choices[0].message.content
-        if not content:
-            raise LLMError(f"LLM call to {self.model!r} returned an empty response")
-        return content
 
 
 def _normalize_input(text: str) -> str:
@@ -155,7 +140,7 @@ class InterviewSession:
             Panel.fit(
                 f"[bold]Idea:[/bold] {escape(self.idea)}\n"
                 "[dim]Answer the architect's questions. Type [bold]/done[/bold] "
-                "or \"let's build it\" anytime to finish.[/dim]",
+                'or "let\'s build it" anytime to finish.[/dim]',
                 title="Interactive Backlog Generator",
                 subtitle="Pragmatic Product Architect",
                 border_style="blue",
@@ -293,9 +278,7 @@ class InterviewSession:
                 lines.append(f"[bold magenta]{escape(line)}[/bold magenta]")
             else:
                 lines.append(escape(line))
-        self.console.print(
-            Panel("\n".join(lines), title="Product Architect", border_style="green")
-        )
+        self.console.print(Panel("\n".join(lines), title="Product Architect", border_style="green"))
         for recommendation in recommendations:
             self.console.print(
                 Panel.fit(

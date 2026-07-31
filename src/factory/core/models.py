@@ -10,16 +10,16 @@ decoupled.
 from __future__ import annotations
 
 import enum
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 def _utcnow() -> datetime:
     """Return the current UTC time as a timezone-aware datetime."""
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class TaskStatus(str, enum.Enum):
@@ -168,3 +168,111 @@ class UserResponse(BaseModel):
     task_id: str
     action: ResponseAction
     message: str = ""
+
+
+class GitConfig(BaseModel):
+    """Git isolation and delivery policy for a project.
+
+    When ``enabled``, the orchestrator requires a clean working tree before
+    every task, works on a dedicated branch per task
+    (``<branch_prefix><task-id>``), commits the agent's changes, and then
+    merges / pushes / opens a PR depending on ``strategy``.
+
+    Attributes:
+        enabled: Perform per-task branch isolation, commits, and delivery.
+        base_branch: Branch every task branch is cut from and merged back into.
+        remote_name: Remote used by the ``push`` and ``pr`` strategies.
+        branch_prefix: Prefix of the per-task branch name.
+        strategy: What happens after a successful task: ``merge`` folds the
+            task branch back into ``base_branch`` (and pushes when a remote
+            is configured), ``push`` uploads the task branch, ``pr`` tries to
+            open a pull request through the ``gh`` CLI, ``none`` leaves the
+            commit on the local task branch.
+        pr_labels: Labels passed to ``gh pr create --label``.
+    """
+
+    enabled: bool = False
+    base_branch: str = "main"
+    remote_name: str = "origin"
+    branch_prefix: str = "factory/task-"
+    strategy: Literal["merge", "push", "pr", "none"] = "push"
+    pr_labels: list[str] = Field(default_factory=list)
+
+
+class RefactoringConfig(BaseModel):
+    """Policy for the proactive Exploratory/Refactoring mode.
+
+    When the daemon wakes up to an empty backlog, ``RefactoringScanner``
+    reviews the repository and proposes improvement tasks. The scanner never
+    edits code itself: it only adds ``OPEN`` tasks for the orchestrator to
+    execute on the next cycle.
+
+    Attributes:
+        enabled: Allow the daemon to run proactive refactoring scans.
+        model: LLM model used for the review; falls back to the
+            ``FACTORY_LLM_MODEL`` environment variable.
+        max_tasks_per_scan: Upper bound on tasks the scanner may propose.
+        cooldown_minutes: Minimum time between two scans that proposed
+            nothing. 0 disables the cooldown (scan every idle cycle).
+    """
+
+    enabled: bool = True
+    model: str | None = None
+    max_tasks_per_scan: int = Field(default=3, ge=1)
+    cooldown_minutes: int = Field(default=0, ge=0)
+
+
+class ProjectConfig(BaseModel):
+    """Everything the daemon needs to run one repository unattended.
+
+    Attributes:
+        project_name: Unique display name for the project; also used as a
+            prefix in daemon state and lock files.
+        repo_path: Local path of the git repository the factory works on.
+        git_remote: Optional remote URL (e.g. ``origin`` URL) used for
+            auto-pushing when set; supercedes the remote's configured URL.
+        schedule_interval_minutes: How often the daemon wakes up to check
+            the backlog (and run a refactoring scan when idle).
+        backlog_source: Path to the backlog file, or an adapter identifier.
+            Relative paths resolve against ``repo_path``.
+        agent_name: Which agent adapter to use (``mock`` | ``shell``).
+        agent: Extra configuration for the agent adapter.
+        feedback: Which feedback provider to use (``console`` | ``webhook``);
+            the daemon always uses the deferred provider regardless.
+        webhook_url: URL for the ``webhook`` feedback provider.
+        max_retries: Extra executions allowed after a task blocks.
+        poll_interval_seconds: Idle wait between polls when the backlog is
+            empty and the scheduler interval has not elapsed.
+        git: Git isolation and delivery policy.
+        refactoring: Proactive refactoring policy.
+        log_file: Where the daemon writes its log; relative paths resolve
+            against ``repo_path``.
+    """
+
+    project_name: str = Field(min_length=1)
+    repo_path: Path = Field(default=Path("."))
+    git_remote: str | None = None
+    schedule_interval_minutes: int = Field(default=60, ge=1)
+    backlog_source: str = "backlog.json"
+    agent_name: str = "mock"
+    agent: AgentConfig | None = None
+    feedback: str = "console"
+    webhook_url: str | None = None
+    max_retries: int = Field(default=3, ge=0)
+    poll_interval_seconds: float = Field(default=5.0, ge=0.1)
+    git: GitConfig = Field(default_factory=GitConfig)
+    refactoring: RefactoringConfig = Field(default_factory=RefactoringConfig)
+    log_file: str | None = "factory.log"
+
+    @field_validator("backlog_source")
+    @classmethod
+    def _backlog_source_not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("backlog_source must not be blank")
+        return value.strip()
+
+    @property
+    def backlog_path(self) -> Path:
+        """Resolve the backlog file path against the repository path."""
+        path = Path(self.backlog_source)
+        return path if path.is_absolute() else self.repo_path / path

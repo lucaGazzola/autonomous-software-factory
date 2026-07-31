@@ -6,6 +6,9 @@ from factory.core.models import (
     AgentConfig,
     ExecutionResult,
     ExecutionStatus,
+    GitConfig,
+    ProjectConfig,
+    RefactoringConfig,
     RepoContext,
     ResponseAction,
     Task,
@@ -14,13 +17,16 @@ from factory.core.models import (
 )
 
 __all__ = [
-    "__version__",
     "AgentConfig",
     "ExecutionResult",
     "ExecutionStatus",
+    "GitConfig",
+    "ProjectConfig",
+    "RefactoringConfig",
     "RepoContext",
     "ResponseAction",
     "Task",
     "TaskStatus",
     "UserResponse",
+    "__version__",
 ]

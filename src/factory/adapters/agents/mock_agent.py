@@ -39,7 +39,9 @@ class MockAgentAdapter(BaseAgentAdapter):
                 ``<repo_path>/artifacts``.
         """
         if default_behavior not in _VALID_BEHAVIORS:
-            raise ValueError(f"default_behavior must be one of {_VALID_BEHAVIORS}, got {default_behavior!r}")
+            raise ValueError(
+                f"default_behavior must be one of {_VALID_BEHAVIORS}, got {default_behavior!r}"
+            )
         self.default_behavior = default_behavior
         self.delay_seconds = delay_seconds
         self.artifact_dir = Path(artifact_dir) if artifact_dir else None
@@ -85,7 +87,9 @@ class MockAgentAdapter(BaseAgentAdapter):
 
         if behavior == "flaky":
             if context.attempt_for(task.id) >= 1:
-                logs.append(f"[{self.name}] Transient block cleared on retry; task {task.id} completed.")
+                logs.append(
+                    f"[{self.name}] Transient block cleared on retry; task {task.id} completed."
+                )
                 return ExecutionResult(
                     status=ExecutionStatus.SUCCESS,
                     output_logs=logs,

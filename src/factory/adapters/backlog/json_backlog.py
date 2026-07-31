@@ -23,7 +23,7 @@ import asyncio
 import json
 import os
 import tempfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -90,7 +90,7 @@ class JSONBacklogAdapter(BaseBacklogAdapter):
             for entry in store["tasks"]:
                 if entry["id"] == task_id:
                     entry["status"] = status.value
-                    entry["updated_at"] = datetime.now(timezone.utc).isoformat()
+                    entry["updated_at"] = datetime.now(UTC).isoformat()
                     updated = self._to_task(entry)
                     break
             if updated is not None:
@@ -117,9 +117,7 @@ class JSONBacklogAdapter(BaseBacklogAdapter):
         """Record an artifact produced for a task."""
         async with self._lock:
             store = await self._read()
-            store.setdefault("artifacts", {}).setdefault(task_id, []).append(
-                str(artifact_path)
-            )
+            store.setdefault("artifacts", {}).setdefault(task_id, []).append(str(artifact_path))
             await self._write(store)
 
     async def list_artifacts(self, task_id: str) -> list[str]:
@@ -134,11 +132,15 @@ class JSONBacklogAdapter(BaseBacklogAdapter):
     async def _read(self) -> dict[str, Any]:
         """Load the store from disk, tolerating a missing or empty file."""
         if not self.path.exists():
-            return {k: (v.copy() if isinstance(v, dict) else list(v)) for k, v in _EMPTY_STORE.items()}
+            return {
+                k: (v.copy() if isinstance(v, dict) else list(v)) for k, v in _EMPTY_STORE.items()
+            }
         try:
             data = json.loads(self.path.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
-            return {k: (v.copy() if isinstance(v, dict) else list(v)) for k, v in _EMPTY_STORE.items()}
+            return {
+                k: (v.copy() if isinstance(v, dict) else list(v)) for k, v in _EMPTY_STORE.items()
+            }
         return {
             "tasks": data.get("tasks", []),
             "comments": data.get("comments", {}),
@@ -148,7 +150,9 @@ class JSONBacklogAdapter(BaseBacklogAdapter):
     async def _write(self, store: dict[str, Any]) -> None:
         """Atomically persist the store (temp file + rename)."""
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        fd, tmp_name = tempfile.mkstemp(dir=self.path.parent, prefix=f".{self.path.name}.", suffix=".tmp")
+        fd, tmp_name = tempfile.mkstemp(
+            dir=self.path.parent, prefix=f".{self.path.name}.", suffix=".tmp"
+        )
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as handle:
                 json.dump(store, handle, indent=2, ensure_ascii=False)
@@ -166,4 +170,8 @@ class JSONBacklogAdapter(BaseBacklogAdapter):
             return Task.model_validate(entry)
         except ValidationError:
             # A manually edited backlog should not take the whole store down.
-            return Task(id=str(entry.get("id", "<unknown>")), title="<unparsable task>", status=TaskStatus.FAILED)
+            return Task(
+                id=str(entry.get("id", "<unknown>")),
+                title="<unparsable task>",
+                status=TaskStatus.FAILED,
+            )

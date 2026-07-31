@@ -6,14 +6,18 @@ disposition (retry / reply / abort) can be scripted deterministically.
 
 from __future__ import annotations
 
-import pytest
+import subprocess
+from pathlib import Path
 
 from factory.adapters.agents import MockAgentAdapter
 from factory.adapters.backlog import JSONBacklogAdapter
 from factory.adapters.feedback.base import BaseFeedbackProvider
+from factory.adapters.git_manager import GitManager
 from factory.core.models import (
     ExecutionResult,
     ExecutionStatus,
+    GitConfig,
+    ProjectConfig,
     RepoContext,
     ResponseAction,
     Task,
@@ -67,7 +71,9 @@ async def run_orchestrator(tmp_path, task: Task, feedback, max_retries: int = 3)
 async def test_success_path(tmp_path):
     """SUCCESS -> task COMPLETED, artifact attached, notification sent."""
     feedback = FakeFeedbackProvider()
-    backlog, orchestrator, feedback = await run_orchestrator(tmp_path, make_task(simulate="success"), feedback)
+    backlog, orchestrator, feedback = await run_orchestrator(
+        tmp_path, make_task(simulate="success"), feedback
+    )
 
     final = await backlog.get_task("T-1")
     assert final is not None
@@ -82,7 +88,9 @@ async def test_success_path(tmp_path):
 async def test_failure_path(tmp_path):
     """ERROR -> task FAILED, error surfaced in comments and notification."""
     feedback = FakeFeedbackProvider()
-    backlog, orchestrator, feedback = await run_orchestrator(tmp_path, make_task(simulate="error"), feedback)
+    backlog, orchestrator, feedback = await run_orchestrator(
+        tmp_path, make_task(simulate="error"), feedback
+    )
 
     final = await backlog.get_task("T-1")
     assert final is not None
@@ -96,7 +104,9 @@ async def test_failure_path(tmp_path):
 async def test_blocked_then_retry_succeeds(tmp_path):
     """BLOCKED (transient) -> operator RETRY -> agent succeeds on second attempt."""
     feedback = FakeFeedbackProvider([UserResponse(task_id="T-1", action=ResponseAction.RETRY)])
-    backlog, orchestrator, feedback = await run_orchestrator(tmp_path, make_task(simulate="flaky"), feedback)
+    backlog, orchestrator, feedback = await run_orchestrator(
+        tmp_path, make_task(simulate="flaky"), feedback
+    )
 
     final = await backlog.get_task("T-1")
     assert final is not None
@@ -112,9 +122,15 @@ async def test_blocked_then_retry_succeeds(tmp_path):
 async def test_blocked_then_human_reply_resolves(tmp_path):
     """BLOCKED -> operator REPLY -> guidance reaches the agent, task succeeds."""
     feedback = FakeFeedbackProvider(
-        [UserResponse(task_id="T-1", action=ResponseAction.REPLY, message="Use exponential backoff")]
+        [
+            UserResponse(
+                task_id="T-1", action=ResponseAction.REPLY, message="Use exponential backoff"
+            )
+        ]
     )
-    backlog, orchestrator, feedback = await run_orchestrator(tmp_path, make_task(simulate="blocked"), feedback)
+    backlog, orchestrator, feedback = await run_orchestrator(
+        tmp_path, make_task(simulate="blocked"), feedback
+    )
 
     final = await backlog.get_task("T-1")
     assert final is not None
@@ -129,7 +145,9 @@ async def test_blocked_then_abort_fails(tmp_path):
     feedback = FakeFeedbackProvider(
         [UserResponse(task_id="T-1", action=ResponseAction.ABORT, message="out of scope")]
     )
-    backlog, orchestrator, feedback = await run_orchestrator(tmp_path, make_task(simulate="blocked"), feedback)
+    backlog, orchestrator, feedback = await run_orchestrator(
+        tmp_path, make_task(simulate="blocked"), feedback
+    )
 
     final = await backlog.get_task("T-1")
     assert final is not None
@@ -144,7 +162,7 @@ async def test_retries_exhausted_fails(tmp_path):
     """Persistent BLOCKED with RETRY -> task FAILED after max_retries."""
     retries = [UserResponse(task_id="T-1", action=ResponseAction.RETRY) for _ in range(3)]
     feedback = FakeFeedbackProvider(retries)
-    backlog, orchestrator, feedback = await run_orchestrator(
+    backlog, _orchestrator, feedback = await run_orchestrator(
         tmp_path, make_task(simulate="blocked"), feedback, max_retries=2
     )
 
@@ -209,3 +227,85 @@ async def test_run_until_idle_drains_backlog(tmp_path):
     assert orchestrator.stats.completed == 2
     assert orchestrator.stats.failed == 1
     assert await orchestrator.run_once() is None  # fully drained
+
+
+# --------------------------------------------------------------------- #
+# Git isolation                                                          #
+# --------------------------------------------------------------------- #
+
+
+def _init_repo(path: Path) -> None:
+    path.mkdir(parents=True, exist_ok=True)
+    for args in (
+        ("init", "-b", "main"),
+        ("config", "user.email", "factory@test.local"),
+        ("config", "user.name", "Factory Test"),
+    ):
+        subprocess.run(["git", "-C", str(path), *args], check=True, capture_output=True)
+    (path / "hello.txt").write_text("hello\n", encoding="utf-8")
+    subprocess.run(["git", "-C", str(path), "add", "-A"], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", str(path), "commit", "-m", "initial"], check=True, capture_output=True
+    )
+
+
+class WritingAgent(MockAgentAdapter):
+    """Mock agent that actually edits the repository it is pointed at."""
+
+    name = "writing"
+
+    async def run_task(self, task, context):
+        repo = Path(context.repo_path)
+        (repo / "hello.txt").write_text("hello, factory\n", encoding="utf-8")
+        (repo / "new.txt").write_text("added\n", encoding="utf-8")
+        return ExecutionResult(status=ExecutionStatus.SUCCESS)
+
+
+async def test_git_isolation_commits_and_merges(tmp_path):
+    """With git enabled, a successful task commits on a task branch and merges into base."""
+    repo = tmp_path / "repo"
+    _init_repo(repo)
+    project = ProjectConfig(
+        project_name="git-test",
+        repo_path=repo,
+        git=GitConfig(enabled=True, strategy="merge", base_branch="main"),
+    )
+    backlog = JSONBacklogAdapter(tmp_path / "backlog.json")
+    await backlog.create_task(make_task("T-1", simulate="success"))
+    feedback = FakeFeedbackProvider()
+    orchestrator = Orchestrator(
+        config=project,
+        backlog=backlog,
+        agent=WritingAgent(delay_seconds=0.0),
+        feedback=feedback,
+        git_manager=GitManager(repo),
+    )
+    await orchestrator.run_once()
+
+    final = await backlog.get_task("T-1")
+    assert final is not None and final.status is TaskStatus.COMPLETED
+    assert (repo / "hello.txt").read_text(encoding="utf-8") == "hello, factory\n"
+    assert orchestrator.git_manager.current_branch() == "main"
+    assert not orchestrator.git_manager.branch_exists("factory/task-T-1")
+
+
+async def test_git_isolation_dirty_repo_fails_task(tmp_path):
+    """A dirty working tree is an explicit blocker: the task fails, not the daemon."""
+    repo = tmp_path / "repo"
+    _init_repo(repo)
+    (repo / "hello.txt").write_text("dirty\n", encoding="utf-8")
+    project = ProjectConfig(project_name="git-test", repo_path=repo, git=GitConfig(enabled=True))
+    backlog = JSONBacklogAdapter(repo / "backlog.json")
+    await backlog.create_task(make_task("T-1", simulate="success"))
+    orchestrator = Orchestrator(
+        config=project,
+        backlog=backlog,
+        agent=MockAgentAdapter(delay_seconds=0.0),
+        feedback=FakeFeedbackProvider(),
+        git_manager=GitManager(repo),
+    )
+    await orchestrator.run_once()
+
+    final = await backlog.get_task("T-1")
+    assert final is not None and final.status is TaskStatus.FAILED
+    assert any("git isolation failed" in c for c in await backlog.list_comments("T-1"))

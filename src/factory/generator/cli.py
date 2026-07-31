@@ -76,9 +76,7 @@ def cmd_generate_backlog(args) -> int:
     if args.force:
         console.print(f"[yellow]--force: existing backlog at {output} will be replaced.[/yellow]")
     elif asyncio.run(_count_tasks(output)):
-        console.print(
-            f"[red]{output} already contains tasks. Pass --force to overwrite it.[/red]"
-        )
+        console.print(f"[red]{output} already contains tasks. Pass --force to overwrite it.[/red]")
         return 2
 
     idea = args.prompt or Prompt.ask("What are we building today?")
@@ -99,8 +97,11 @@ def cmd_generate_backlog(args) -> int:
         return 1
 
     console.print(
-        Panel.fit("Decomposing the specification into executable tasks...",
-                  title="Backlog generation", border_style="cyan")
+        Panel.fit(
+            "Decomposing the specification into executable tasks...",
+            title="Backlog generation",
+            border_style="cyan",
+        )
     )
     try:
         tasks = TaskDecomposer(llm).decompose(session.specification())

@@ -154,9 +154,7 @@ class TaskDecomposer:
             for dependency in task.dependencies:
                 position = positions.get(dependency)
                 if position is None:
-                    raise DecompositionError(
-                        f"{task.id} depends on unknown task {dependency!r}"
-                    )
+                    raise DecompositionError(f"{task.id} depends on unknown task {dependency!r}")
                 if position >= positions[task.id]:
                     raise DecompositionError(
                         f"{task.id} depends on {dependency!r} which is not listed earlier "

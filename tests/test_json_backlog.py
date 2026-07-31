@@ -34,9 +34,7 @@ async def test_duplicate_id_rejected(backlog_path):
 async def test_fetch_next_task_returns_only_open(backlog_path):
     adapter = JSONBacklogAdapter(backlog_path)
     await adapter.create_task(Task(id="T-1", title="Old open"))
-    await adapter.create_task(
-        Task(id="T-2", title="In progress", status=TaskStatus.IN_PROGRESS)
-    )
+    await adapter.create_task(Task(id="T-2", title="In progress", status=TaskStatus.IN_PROGRESS))
     await adapter.create_task(Task(id="T-3", title="Newer open"))
     task = await adapter.fetch_next_task()
     assert task is not None

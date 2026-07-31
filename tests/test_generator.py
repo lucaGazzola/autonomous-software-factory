@@ -102,7 +102,9 @@ def scripted_input(answers: list[str]):
 
 
 def make_interview(responses: list[str], answers: list[str]) -> InterviewSession:
-    return InterviewSession("File conversion web app", FakeLLMClient(responses), input_fn=scripted_input(answers))
+    return InterviewSession(
+        "File conversion web app", FakeLLMClient(responses), input_fn=scripted_input(answers)
+    )
 
 
 # --------------------------------------------------------------------- #
@@ -157,9 +159,7 @@ def test_interview_exit_phrase_finalizes_early():
 
 def test_interview_help_command_is_not_a_decision():
     """/help is rendered and does not reach the decision log."""
-    session = make_interview(
-        ARCHITECT_QUESTIONS[:2], ["/help", "Python", "/done", "y"]
-    )
+    session = make_interview(ARCHITECT_QUESTIONS[:2], ["/help", "Python", "/done", "y"])
     session.run()
     assert session.finalized
     assert len(session.decisions) == 1
@@ -194,7 +194,7 @@ def test_extract_json_tolerates_code_fences():
 
 
 def test_extract_json_finds_embedded_array():
-    payload = extract_json('prose [1, 2, 3] trailing')
+    payload = extract_json("prose [1, 2, 3] trailing")
     assert payload == [1, 2, 3]
 
 

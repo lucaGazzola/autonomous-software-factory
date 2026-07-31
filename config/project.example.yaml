@@ -1,0 +1,46 @@
+# Software Factory project configuration (ProjectConfig schema).
+# One file per repository the factory automates. Launch with:
+#
+#   factory start-daemon --config config/project.example.yaml
+#
+# or run a single immediate pass with:
+#
+#   factory run --project config/project.example.yaml
+
+project_name: example-project
+
+repo_path: .                      # Local git repository the factory works on.
+git_remote: null                  # Remote URL for auto-pushing (e.g. https://github.com/you/repo.git).
+
+schedule_interval_minutes: 60     # How often the daemon wakes up to check the backlog.
+
+backlog_source: backlog.json      # Backlog file; relative paths resolve against repo_path.
+
+agent_name: mock                  # mock | shell
+# Extra agent options for the shell agent (required when agent_name: shell):
+# agent:
+#   command: "aider --message \"{{task}}\""   # string or YAML list of argv
+#   timeout_seconds: 300
+#   env: {}
+
+feedback: console                 # console | webhook (the daemon alerts through this notifier).
+webhook_url: null
+
+max_retries: 3                    # Executions allowed after a task blocks.
+poll_interval_seconds: 5          # Idle poll delay (also the deferred HITL wait granularity).
+
+git:
+  enabled: true                   # Per-task branch isolation, commits, and delivery.
+  base_branch: main
+  remote_name: origin
+  branch_prefix: factory/task-
+  strategy: push                  # merge | push | pr | none
+  pr_labels: []
+
+refactoring:
+  enabled: true                   # Proactive scans when the backlog is empty.
+  model: null                     # LLM model; falls back to FACTORY_LLM_MODEL.
+  max_tasks_per_scan: 3
+  cooldown_minutes: 0             # Min. minutes between scans that propose nothing (0 = disabled).
+
+log_file: factory.log

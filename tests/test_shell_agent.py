@@ -60,8 +60,8 @@ async def test_env_and_workdir(tmp_path):
     (tmp_path / "marker.txt").write_text("ok", encoding="utf-8")
     agent = make_agent(
         f"{sys.executable} -c 'import os,sys; "
-        "assert os.environ[\"FACTORY_FLAG\"] == \"1\"; "
-        "assert os.path.exists(\"marker.txt\"); print(\"env-cwd-ok\")'",
+        'assert os.environ["FACTORY_FLAG"] == "1"; '
+        'assert os.path.exists("marker.txt"); print("env-cwd-ok")\'',
         env={"FACTORY_FLAG": "1"},
     )
     result = await agent.run_task(
