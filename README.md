@@ -23,6 +23,16 @@ factory start
 bare `factory` also starts the wizard when no config exists). `factory start`
 runs the schedule forever — interrupt it with Ctrl-C. Logs go to `factory.log`.
 
+After you started the daemon, check if it is still running with:
+
+```bash
+pgrep -af factory    # shows the daemon process; empty output = not running
+```
+
+The daemon also writes a PID to a lock file next to the backlog
+(`backlog.lock`); the lock is released automatically when the process exits,
+even on a crash, so a leftover file alone does not mean it is still running.
+
 ## The backlog
 
 A plain JSON file you edit by hand:
