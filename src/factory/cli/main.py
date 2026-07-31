@@ -1,11 +1,13 @@
-"""Command-line interface: ``factory init`` and ``factory run``.
+"""Command-line interface: ``factory init``, ``factory run``, and ``factory generate-backlog``.
 
 ``factory init`` seeds a JSON backlog with sample tasks for a dry run.
 ``factory run`` executes the orchestrator end to end: pull tasks from the
 backlog, run them through the configured agent adapter, route blocked
 tasks through the human-in-the-loop channel, and report final state.
+``factory generate-backlog`` interviews a raw product idea and writes a
+validated, machine-executable backlog through the ``JSONBacklogAdapter``.
 
-Both commands read defaults from ``config/factory.yaml`` when present;
+Both run commands read defaults from ``config/factory.yaml`` when present;
 explicit CLI flags always win. Run ``python -m factory run --help`` for
 the full option list.
 """
@@ -90,6 +92,14 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("--webhook-url", default=None, help="URL for the webhook feedback provider.")
     run_parser.add_argument("--delay", type=float, default=None, help="Mock agent artificial latency (seconds).")
     run_parser.add_argument("--once", action="store_true", help="Process a single task and exit.")
+
+    gen_parser = sub.add_parser(
+        "generate-backlog", help="Interview a product idea and generate an executable backlog."
+    )
+    gen_parser.add_argument("--prompt", "-p", default=None, help="Initial product idea (prompted if omitted).")
+    gen_parser.add_argument("--output", "-o", type=Path, default=DEFAULT_BACKLOG, help="Backlog file to write.")
+    gen_parser.add_argument("--model", default=None, help="LLM model (overrides FACTORY_LLM_MODEL).")
+    gen_parser.add_argument("--force", action="store_true", help="Replace an existing backlog file.")
     return parser
 
 
@@ -303,6 +313,10 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_init(args)
     if args.action == "run":
         return cmd_run(args)
+    if args.action == "generate-backlog":
+        from factory.generator.cli import cmd_generate_backlog
+
+        return cmd_generate_backlog(args)
     parser.error(f"unknown command: {args.action}")
     return 2
 

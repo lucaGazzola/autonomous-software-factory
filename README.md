@@ -24,6 +24,24 @@ factory run --agent shell --command "aider --message 'implement the task'"
 
 Settings live in `config/factory.yaml`; CLI flags override them.
 
+## Backlog generator
+
+Have an idea but no backlog? `factory generate-backlog` interviews you with an
+LLM "Product Architect", then turns the agreed spec into an ordered list of
+executable tasks:
+
+```bash
+pip install -e ".[llm]"                  # LLM backend (litellm)
+export FACTORY_LLM_MODEL=gpt-4o          # optional; defaults to gpt-4o
+factory generate-backlog -p "File conversion web app"
+```
+
+The architect asks a few pointed questions (stack, storage, auth, edge cases...)
+and always recommends an answer. Reply normally, or type `/done` (or "let's
+build it") to finish early. Ctrl+C saves your interview so nothing is lost.
+
+The resulting `backlog.json` feeds straight into `factory run`.
+
 ## How it works
 
 Everything is an adapter behind a tiny async interface (`src/factory/core/orchestrator.py`):

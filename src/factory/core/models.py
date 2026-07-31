@@ -55,6 +55,10 @@ class Task(BaseModel):
         id: Stable, unique identifier assigned by the backlog (e.g. ``TASK-001``).
         title: Short human-readable summary of the work.
         description: Full specification or acceptance criteria for the work.
+        dependencies: Ids of tasks that must finish before this one starts
+            (empty for setup/root tasks).
+        acceptance_criteria: Concrete, testable conditions that mark the task done.
+        files_to_modify: Repo-relative file paths the task is expected to touch.
         status: Current lifecycle state, managed by the orchestrator.
         metadata: Free-form adapter-specific key/value data (e.g. ``{"simulate": "blocked"}``).
         created_at: UTC timestamp of creation.
@@ -64,6 +68,9 @@ class Task(BaseModel):
     id: str
     title: str
     description: str = ""
+    dependencies: list[str] = Field(default_factory=list)
+    acceptance_criteria: list[str] = Field(default_factory=list)
+    files_to_modify: list[str] = Field(default_factory=list)
     status: TaskStatus = TaskStatus.OPEN
     metadata: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime = Field(default_factory=_utcnow)

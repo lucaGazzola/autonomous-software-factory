@@ -22,6 +22,20 @@ def test_task_defaults():
     assert task.created_at is not None
 
 
+def test_task_execution_fields_roundtrip():
+    task = Task(
+        id="T-1",
+        title="Do a thing",
+        description="Properly.",
+        dependencies=["T-0"],
+        acceptance_criteria=["works", "is tested"],
+        files_to_modify=["src/main.py"],
+    )
+    restored = Task.model_validate(json.loads(task.model_dump_json()))
+    assert restored == task
+    assert Task(id="T-2", title="Plain").dependencies == []
+
+
 def test_task_json_roundtrip():
     task = Task(
         id="T-1",
