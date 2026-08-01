@@ -115,42 +115,99 @@ class Factory:
             RepoContext(repo_path=self.config.repo, branch=self.config.branch),
         )
 
-        if result.status is ExecutionStatus.SUCCESS:
-            if await self._commit_and_push(f"factory: {task.title} (#{task.id})", task=task):
-                await self.backlog.update_status(task.id, TaskStatus.COMPLETED)
-                self.config.blocker_file.unlink(missing_ok=True)
-                logger.info("Task %s completed.", task.id)
-            return
-
         if result.status is ExecutionStatus.BLOCKED:
             await self.backlog.update_status(task.id, TaskStatus.BLOCKED)
-            if await self._commit_and_push(
-                f"factory: {task.title} (#{task.id}) [partial]", task=task
-            ):
+
+        ok = await self._handle_execution_result(
+            result,
+            task=task,
+            success_message=f"factory: {task.title} (#{task.id})",
+            blocked_message=f"factory: {task.title} (#{task.id}) [partial]",
+            instruction=self._task_instruction(task),
+        )
+
+        if result.status is ExecutionStatus.SUCCESS and ok:
+            await self.backlog.update_status(task.id, TaskStatus.COMPLETED)
+            self.config.blocker_file.unlink(missing_ok=True)
+            logger.info("Task %s completed.", task.id)
+        elif result.status is ExecutionStatus.ERROR:
+            await self.backlog.update_status(task.id, TaskStatus.FAILED)
+
+    async def _handle_execution_result(
+        self,
+        result: ExecutionResult,
+        *,
+        task: Task,
+        success_message: str,
+        blocked_message: str,
+        instruction: str,
+        is_refactor: bool = False,
+    ) -> bool:
+        """Apply shared SUCCESS / BLOCKED / ERROR side effects for an agent run.
+
+        * SUCCESS — commit and push ``success_message``.
+        * BLOCKED — commit partial work under ``blocked_message``, then write
+          the blocker file explaining what the human must do.
+        * ERROR — hard-reset the working tree and log the failure.
+
+        Returns ``True`` only when the result was SUCCESS and the commit path
+        succeeded, so callers can apply backlog status transitions. This
+        method does not update task status itself (except indirectly when
+        ``_commit_and_push`` fails and marks the task FAILED).
+        """
+        if result.status is ExecutionStatus.SUCCESS:
+            return await self._commit_and_push(success_message, task=task)
+
+        if result.status is ExecutionStatus.BLOCKED:
+            if await self._commit_and_push(blocked_message, task=task):
                 await self._write_blocker(
                     [
                         BlockerEntry(
                             task=task,
                             result=result,
-                            instruction=self._task_instruction(task),
+                            instruction=instruction,
+                            is_refactor=is_refactor,
                         )
                     ]
                 )
-            logger.warning("Task %s is BLOCKED; blocker file written.", task.id)
-            return
+            if is_refactor:
+                logger.warning("Refactoring pass is BLOCKED; blocker file written.")
+            else:
+                logger.warning("Task %s is BLOCKED; blocker file written.", task.id)
+            return False
 
-        await self._fail(task, result, discard_work=True)
+        await self._discard_failed_work(task, result, is_refactor=is_refactor)
+        return False
+
+    async def _discard_failed_work(
+        self,
+        task: Task,
+        result: ExecutionResult,
+        *,
+        is_refactor: bool = False,
+    ) -> None:
+        """Hard-reset agent changes after ERROR and log the failure detail."""
+        try:
+            await self.git.a_reset_hard()
+        except GitError as exc:
+            if is_refactor:
+                logger.error("Could not discard refactoring changes: %s", exc)
+            else:
+                logger.error("Could not discard agent work for %s: %s", task.id, exc)
+        detail = result.error or "no error detail provided"
+        if is_refactor:
+            logger.error("Refactoring pass FAILED: %s", detail)
+        else:
+            logger.error("Task %s FAILED: %s", task.id, detail)
 
     async def _fail(self, task: Task, result: ExecutionResult, *, discard_work: bool) -> None:
         """Discard the agent's work, mark the task FAILED, and log the error."""
         if discard_work:
-            try:
-                await self.git.a_reset_hard()
-            except GitError as exc:
-                logger.error("Could not discard agent work for %s: %s", task.id, exc)
+            await self._discard_failed_work(task, result)
+        else:
+            detail = result.error or "no error detail provided"
+            logger.error("Task %s FAILED: %s", task.id, detail)
         await self.backlog.update_status(task.id, TaskStatus.FAILED)
-        detail = result.error or "no error detail provided"
-        logger.error("Task %s FAILED: %s", task.id, detail)
 
     async def _commit_and_push(self, message: str, *, task: Task) -> bool:
         """Commit everything on the main branch and push when a remote is set.
@@ -195,32 +252,14 @@ class Factory:
             refactor_task,
             RepoContext(repo_path=self.config.repo, branch=self.config.branch),
         )
-
-        if result.status is ExecutionStatus.SUCCESS:
-            await self._commit_and_push("factory: refactoring pass", task=refactor_task)
-            return
-        if result.status is ExecutionStatus.BLOCKED:
-            if await self._commit_and_push(
-                "factory: refactoring pass [partial]", task=refactor_task
-            ):
-                await self._write_blocker(
-                    [
-                        BlockerEntry(
-                            task=refactor_task,
-                            result=result,
-                            instruction=self.config.refactor_prompt,
-                            is_refactor=True,
-                        )
-                    ]
-                )
-            logger.warning("Refactoring pass is BLOCKED; blocker file written.")
-            return
-        try:
-            await self.git.a_reset_hard()
-        except GitError as exc:
-            logger.error("Could not discard refactoring changes: %s", exc)
-        detail = result.error or "no error detail provided"
-        logger.error("Refactoring pass FAILED: %s", detail)
+        await self._handle_execution_result(
+            result,
+            task=refactor_task,
+            success_message="factory: refactoring pass",
+            blocked_message="factory: refactoring pass [partial]",
+            instruction=self.config.refactor_prompt,
+            is_refactor=True,
+        )
 
     # ------------------------------------------------------------------ #
     # Blocker file                                                        #
