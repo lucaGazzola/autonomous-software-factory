@@ -58,6 +58,33 @@ def acquire_run_lock(lock_path: str | Path) -> Any:
     return _take_flock(lock_path)
 
 
+def is_lock_held(lock_path: str | Path) -> bool:
+    """Return True when another process currently holds the exclusive flock.
+
+    Does not create the lock file when it is missing. A leftover file with
+    no live holder counts as not held.
+    """
+    lock_file = Path(lock_path)
+    if not lock_file.exists():
+        return False
+    try:
+        import fcntl
+    except ImportError:
+        return False
+    try:
+        handle = lock_file.open("r")
+    except OSError:
+        return False
+    try:
+        fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        fcntl.flock(handle, fcntl.LOCK_UN)
+        return False
+    except OSError:
+        return True
+    finally:
+        handle.close()
+
+
 class RunLock:
     """Per-iteration lock: one agent run at a time per factory.
 

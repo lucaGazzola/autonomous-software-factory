@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from factory.daemon import FactoryDaemon, RunLock, acquire_run_lock
+from factory.daemon import FactoryDaemon, RunLock, acquire_run_lock, is_lock_held
 from tests.conftest import make_config
 
 
@@ -69,6 +69,16 @@ def test_run_lock_is_exclusive(tmp_path):
     assert acquire_run_lock(lock_path) is None
     first.close()
     assert acquire_run_lock(lock_path) is not None
+
+
+def test_is_lock_held_detects_holder_and_stale_file(tmp_path):
+    lock_path = tmp_path / "factory.lock"
+    assert is_lock_held(lock_path) is False
+    held = acquire_run_lock(lock_path)
+    assert held is not None
+    assert is_lock_held(lock_path) is True
+    held.close()
+    assert is_lock_held(lock_path) is False
 
 
 def test_run_lock_held_while_active(tmp_path):

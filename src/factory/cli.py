@@ -14,6 +14,9 @@ Commands:
 * ``factory once --config factory.yaml`` — run exactly one cycle and exit.
    Shares the per-factory lock with the daemon, so it never overlaps a
    running ``start``.
+* ``factory status --config factory.yaml`` — print a read-only summary of the
+   factory (config, backlog, daemon lock, last log outcome) and exit. Never
+   starts an agent.
 """
 
 from __future__ import annotations
@@ -23,6 +26,7 @@ import asyncio
 import logging
 import signal
 import sys
+from collections import Counter
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any
@@ -35,11 +39,13 @@ from factory import __version__
 from factory.agent import ShellAgent
 from factory.backlog import JSONBacklog
 from factory.config import load_config
-from factory.daemon import FactoryDaemon, acquire_run_lock
+from factory.daemon import FactoryDaemon, acquire_run_lock, is_lock_held
 from factory.factory import Factory
 from factory.git import GitManager
-from factory.models import FactoryConfig
+from factory.models import FactoryConfig, Task, TaskStatus
 from factory.setup import run_setup
+
+OUTCOME_MARKER = "Run finished: "
 
 DEFAULT_CONFIG = Path("factory.yaml")
 
@@ -85,6 +91,17 @@ def build_parser() -> argparse.ArgumentParser:
 
     once_parser = sub.add_parser("once", help="Run exactly one factory cycle and exit.")
     once_parser.add_argument(
+        "--config",
+        type=Path,
+        default=DEFAULT_CONFIG,
+        help="Factory YAML file (default: factory.yaml).",
+    )
+
+    status_parser = sub.add_parser(
+        "status",
+        help="Print a read-only summary of the factory (never starts an agent).",
+    )
+    status_parser.add_argument(
         "--config",
         type=Path,
         default=DEFAULT_CONFIG,
@@ -249,6 +266,85 @@ def cmd_init(args: argparse.Namespace) -> int:
     return 0
 
 
+def backlog_status_counts(tasks: list[Task]) -> dict[str, int]:
+    """Count tasks by status; always includes every known status key."""
+    counts = {status.value: 0 for status in TaskStatus}
+    counts.update(Counter(task.status.value for task in tasks))
+    return counts
+
+
+def next_open_task(tasks: list[Task]) -> Task | None:
+    """Return the oldest OPEN task, or ``None`` when there is none."""
+    open_tasks = [task for task in tasks if task.status is TaskStatus.OPEN]
+    if not open_tasks:
+        return None
+    return min(open_tasks, key=lambda task: task.created_at)
+
+
+def last_outcome_from_log(log_file: str | Path) -> str | None:
+    """Return the last ``Run finished: …`` outcome from the log, if any."""
+    path = Path(log_file)
+    if not path.exists():
+        return None
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    outcome: str | None = None
+    for line in text.splitlines():
+        if OUTCOME_MARKER in line:
+            outcome = line.rsplit(OUTCOME_MARKER, 1)[-1].strip() or None
+    return outcome
+
+
+def render_status(
+    config: FactoryConfig,
+    tasks: list[Task],
+    *,
+    daemon_running: bool,
+    last_outcome: str | None,
+) -> str:
+    """Render the human-readable status summary as plain text."""
+    counts = backlog_status_counts(tasks)
+    count_text = " ".join(f"{status}={counts[status]}" for status in counts)
+    nxt = next_open_task(tasks)
+    next_text = f"{nxt.id} — {nxt.title}" if nxt is not None else "(none)"
+    daemon_text = "running" if daemon_running else "not running"
+    outcome_text = last_outcome if last_outcome is not None else "(none)"
+    return "\n".join(
+        [
+            f"name: {config.name}",
+            f"repo: {config.repo}",
+            f"interval: {config.interval_minutes} min",
+            f"branch: {config.branch}",
+            f"backlog: {count_text}",
+            f"next: {next_text}",
+            f"daemon: {daemon_text}",
+            f"last outcome: {outcome_text}",
+        ]
+    )
+
+
+def cmd_status(args: argparse.Namespace) -> int:
+    """Handle ``factory status``: read-only summary; never starts an agent."""
+    if not args.config.exists():
+        console.print(f"[red]Config file not found: {args.config}[/red]")
+        return 1
+    config = load_config(args.config)
+    tasks = asyncio.run(JSONBacklog(config.backlog).list_tasks())
+    daemon_running = is_lock_held(config.backlog.with_suffix(".lock"))
+    last_outcome = last_outcome_from_log(config.log_file)
+    console.print(
+        render_status(
+            config,
+            tasks,
+            daemon_running=daemon_running,
+            last_outcome=last_outcome,
+        )
+    )
+    return 0
+
+
 def cmd_default() -> int:
     """Bare ``factory``: show help when configured, run the wizard otherwise."""
     if DEFAULT_CONFIG.exists():
@@ -270,6 +366,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_once(args)
     if args.action == "init":
         return cmd_init(args)
+    if args.action == "status":
+        return cmd_status(args)
     parser.error(f"unknown command: {args.action}")
     return 2
 
