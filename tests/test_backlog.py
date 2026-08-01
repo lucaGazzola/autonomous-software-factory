@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -61,10 +62,16 @@ async def test_missing_file_yields_empty_backlog(tmp_path):
     assert await backlog.fetch_next_task() is None
 
 
-async def test_corrupt_file_yields_empty_backlog(tmp_path):
+async def test_corrupt_file_is_preserved_and_yields_empty_backlog(tmp_path, caplog):
     path = tmp_path / "backlog.json"
     path.write_text("{not valid json", encoding="utf-8")
-    assert await JSONBacklog(path).list_tasks() == []
+    with caplog.at_level(logging.WARNING, logger="factory.backlog"):
+        assert await JSONBacklog(path).list_tasks() == []
+    assert not path.exists()
+    corrupt = list(tmp_path.glob("backlog.json.corrupt-*"))
+    assert len(corrupt) == 1
+    assert corrupt[0].read_text(encoding="utf-8") == "{not valid json"
+    assert "corrupt" in caplog.text.lower()
 
 
 async def test_invalid_task_row_does_not_kill_the_store(tmp_path):

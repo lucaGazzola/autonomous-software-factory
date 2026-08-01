@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import tempfile
 from datetime import UTC, datetime
@@ -19,6 +20,8 @@ from typing import Any
 from pydantic import ValidationError
 
 from factory.models import Task, TaskStatus
+
+logger = logging.getLogger(__name__)
 
 _EMPTY_STORE: dict[str, Any] = {"tasks": []}
 
@@ -87,6 +90,20 @@ class JSONBacklog:
         try:
             data = json.loads(self.path.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
+            timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%f")
+            corrupt_path = self.path.with_name(f"{self.path.name}.corrupt-{timestamp}")
+            try:
+                self.path.rename(corrupt_path)
+                logger.warning(
+                    "Corrupt backlog at %s renamed to %s; starting with empty store",
+                    self.path,
+                    corrupt_path,
+                )
+            except OSError:
+                logger.warning(
+                    "Corrupt backlog at %s could not be preserved; starting with empty store",
+                    self.path,
+                )
             return {"tasks": []}
         if not isinstance(data, dict):
             return {"tasks": []}
