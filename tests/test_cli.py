@@ -1,9 +1,13 @@
-"""CLI tests for the ``factory once`` and ``factory status`` commands."""
+"""CLI tests for the ``factory once``/``status``/``stop``/``restart`` commands."""
 
 from __future__ import annotations
 
 import argparse
 import json
+import subprocess
+import sys
+import time
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -11,12 +15,14 @@ from factory.cli import (
     backlog_status_counts,
     build_parser,
     cmd_once,
+    cmd_restart,
     cmd_status,
+    cmd_stop,
     last_outcome_from_log,
     next_open_task,
     render_status,
 )
-from factory.daemon import acquire_run_lock
+from factory.daemon import acquire_run_lock, is_lock_held, read_lock_pid
 from factory.models import TaskStatus
 from tests.conftest import make_config, make_task
 
@@ -44,7 +50,8 @@ def write_config(git_repo: Path, tmp_path: Path, **overrides) -> Path:
         f"agent_command: {config.agent_command}\n"
         f"log_file: {config.log_file}\n"
         f"interval_minutes: {config.interval_minutes}\n"
-        f"branch: {config.branch}\n",
+        f"branch: {config.branch}\n"
+        f"web_port: {config.web_port}\n",
         encoding="utf-8",
     )
     return path
@@ -56,6 +63,35 @@ def once_args(config_path: Path) -> argparse.Namespace:
 
 def status_args(config_path: Path) -> argparse.Namespace:
     return argparse.Namespace(config=config_path)
+
+
+def stop_args(config_path: Path, timeout: float = 30.0) -> argparse.Namespace:
+    return argparse.Namespace(config=config_path, timeout=timeout)
+
+
+def restart_args(config_path: Path, timeout: float = 30.0) -> argparse.Namespace:
+    return argparse.Namespace(config=config_path, timeout=timeout)
+
+
+def wait_for(predicate: Callable[[], bool], timeout: float = 15.0) -> bool:
+    """Poll ``predicate`` until it holds; False on timeout."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if predicate():
+            return True
+        time.sleep(0.1)
+    return False
+
+
+def spawn_daemon(config_path: Path) -> subprocess.Popen[bytes]:
+    """Start a real ``factory start`` subprocess, detached like restart does."""
+    return subprocess.Popen(
+        [sys.executable, "-m", "factory", "start", "--config", str(config_path)],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
 
 
 def test_once_runs_one_cycle_and_exits_zero(git_repo, tmp_path, monkeypatch, capsys):
@@ -289,3 +325,93 @@ def test_status_does_not_invoke_agent(git_repo, tmp_path, monkeypatch):
 def test_status_missing_config(tmp_path, capsys):
     assert cmd_status(status_args(tmp_path / "missing.yaml")) == 1
     assert "not found" in capsys.readouterr().out
+
+
+def test_parser_help_lists_stop_and_restart(capsys):
+    build_parser().print_help()
+    out = capsys.readouterr().out
+    assert "stop" in out
+    assert "restart" in out
+
+
+def test_stop_not_running(git_repo, tmp_path, capsys):
+    config_path = write_config(git_repo, tmp_path)
+    assert cmd_stop(stop_args(config_path)) == 1
+    assert "not running" in capsys.readouterr().out
+
+
+def test_stop_missing_config(tmp_path, capsys):
+    assert cmd_stop(stop_args(tmp_path / "missing.yaml")) == 1
+    assert "not found" in capsys.readouterr().out
+
+
+def test_stop_stale_pid_errors(git_repo, tmp_path, capsys):
+    """Lock held by an unknown process with a dead recorded pid: refuse."""
+    import fcntl
+
+    config_path = write_config(git_repo, tmp_path)
+    handle = (tmp_path / "backlog.lock").open("w")
+    handle.write("pid=999999999\n")
+    handle.flush()
+    fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    try:
+        assert cmd_stop(stop_args(config_path)) == 1
+        assert "is gone" in capsys.readouterr().out
+    finally:
+        handle.close()
+
+
+def test_stop_terminates_running_daemon(git_repo, tmp_path, capsys):
+    config_path = write_config(git_repo, tmp_path, web_port=0, interval_minutes=600)
+    lock_path = tmp_path / "backlog.lock"
+    proc = spawn_daemon(config_path)
+    try:
+        assert wait_for(lambda: is_lock_held(lock_path))
+
+        assert cmd_stop(stop_args(config_path)) == 0
+        assert "stopped" in capsys.readouterr().out
+        assert wait_for(lambda: proc.poll() is not None)
+        assert not is_lock_held(lock_path)
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+
+
+def test_restart_starts_daemon_when_not_running(git_repo, tmp_path, capsys):
+    config_path = write_config(git_repo, tmp_path, web_port=0, interval_minutes=600)
+    lock_path = tmp_path / "backlog.lock"
+
+    assert cmd_restart(restart_args(config_path)) == 0
+    try:
+        out = capsys.readouterr().out
+        assert "restarted" in out
+        assert "interval 600 min" in out
+        assert is_lock_held(lock_path)
+        pid = read_lock_pid(lock_path)
+        assert pid is not None
+    finally:
+        cmd_stop(stop_args(config_path))
+
+
+def test_restart_replaces_running_daemon(git_repo, tmp_path, capsys):
+    config_path = write_config(git_repo, tmp_path, web_port=0, interval_minutes=600)
+    lock_path = tmp_path / "backlog.lock"
+    old_proc = spawn_daemon(config_path)
+    try:
+        assert wait_for(lambda: is_lock_held(lock_path))
+        old_pid = read_lock_pid(lock_path)
+        assert old_pid is not None
+        capsys.readouterr()
+
+        assert cmd_restart(restart_args(config_path)) == 0
+        out = capsys.readouterr().out
+        assert "restarted" in out
+        new_pid = read_lock_pid(lock_path)
+        assert new_pid is not None
+        assert new_pid != old_pid
+        assert wait_for(lambda: old_proc.poll() is not None)
+        assert is_lock_held(lock_path)
+    finally:
+        if old_proc.poll() is None:
+            old_proc.kill()
+        cmd_stop(stop_args(config_path))

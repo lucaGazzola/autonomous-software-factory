@@ -17,6 +17,10 @@ Commands:
 * ``factory status --config factory.yaml`` — print a read-only summary of the
    factory (config, backlog, daemon lock, last log outcome) and exit. Never
    starts an agent.
+* ``factory stop --config factory.yaml`` — stop a running daemon gracefully
+   (SIGTERM; a cycle in progress finishes first).
+* ``factory restart --config factory.yaml`` — stop the daemon when running,
+   then start it again detached in the background, re-reading the config.
 """
 
 from __future__ import annotations
@@ -24,8 +28,11 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
+import os
 import signal
+import subprocess
 import sys
+import time
 from collections import Counter
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -39,7 +46,7 @@ from factory import __version__
 from factory.agent import ShellAgent
 from factory.backlog import JSONBacklog
 from factory.config import load_config
-from factory.daemon import FactoryDaemon, acquire_run_lock, is_lock_held
+from factory.daemon import FactoryDaemon, acquire_run_lock, is_lock_held, read_lock_pid
 from factory.factory import Factory
 from factory.git import GitManager
 from factory.models import FactoryConfig, Task, TaskStatus
@@ -49,6 +56,10 @@ from factory.setup import run_setup
 OUTCOME_MARKER = "Run finished: "
 
 DEFAULT_CONFIG = Path("factory.yaml")
+
+STOP_TIMEOUT_SECONDS = 600.0
+START_TIMEOUT_SECONDS = 15.0
+_POLL_SECONDS = 0.5
 
 console = Console()
 
@@ -107,6 +118,42 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=DEFAULT_CONFIG,
         help="Factory YAML file (default: factory.yaml).",
+    )
+
+    stop_parser = sub.add_parser(
+        "stop",
+        help="Stop a running factory daemon gracefully (SIGTERM).",
+    )
+    stop_parser.add_argument(
+        "--config",
+        type=Path,
+        default=DEFAULT_CONFIG,
+        help="Factory YAML file (default: factory.yaml).",
+    )
+    stop_parser.add_argument(
+        "--timeout",
+        type=float,
+        default=STOP_TIMEOUT_SECONDS,
+        help="Seconds to wait for the daemon to exit (default: 600); a cycle "
+        "in progress always finishes first.",
+    )
+
+    restart_parser = sub.add_parser(
+        "restart",
+        help="Restart the factory daemon in the background, re-reading the config.",
+    )
+    restart_parser.add_argument(
+        "--config",
+        type=Path,
+        default=DEFAULT_CONFIG,
+        help="Factory YAML file (default: factory.yaml).",
+    )
+    restart_parser.add_argument(
+        "--timeout",
+        type=float,
+        default=STOP_TIMEOUT_SECONDS,
+        help="Seconds to wait for the old daemon to exit (default: 600); a "
+        "cycle in progress always finishes first.",
     )
     return parser
 
@@ -362,6 +409,101 @@ def cmd_status(args: argparse.Namespace) -> int:
     return 0
 
 
+def _load_config_or_error(config_path: Path) -> FactoryConfig | None:
+    """Load an existing config; prints an error and returns None when missing."""
+    if not config_path.exists():
+        console.print(f"[red]Config file not found: {config_path}[/red]")
+        return None
+    return load_config(config_path)
+
+
+def _wait_for_lock_release(lock_path: Path, timeout: float) -> bool:
+    """Poll until the daemon lock is released; False on timeout."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if not is_lock_held(lock_path):
+            return True
+        time.sleep(_POLL_SECONDS)
+    return not is_lock_held(lock_path)
+
+
+def _stop_daemon(config: FactoryConfig, timeout: float) -> bool:
+    """SIGTERM the running daemon and wait for it to exit; False on failure."""
+    lock_path = config.backlog.with_suffix(".lock")
+    pid = read_lock_pid(lock_path)
+    if pid is None:
+        console.print(
+            f"[red]The lock file {lock_path} records no PID; find the daemon "
+            f"with `pgrep -af factory` and stop it manually.[/red]"
+        )
+        return False
+    console.print(f"Stopping factory {config.name!r} (pid {pid})…")
+    try:
+        os.kill(pid, signal.SIGTERM)
+    except ProcessLookupError:
+        if not is_lock_held(lock_path):
+            console.print(f"[green]Factory {config.name!r} stopped.[/green]")
+            return True
+        console.print(
+            f"[red]Recorded pid {pid} is gone but the lock is still held; "
+            f"check with `pgrep -af factory`.[/red]"
+        )
+        return False
+    except PermissionError:
+        console.print(f"[red]No permission to stop process {pid}.[/red]")
+        return False
+    if _wait_for_lock_release(lock_path, timeout):
+        console.print(f"[green]Factory {config.name!r} stopped.[/green]")
+        return True
+    console.print(
+        f"[yellow]Factory is still shutting down after {timeout:.0f}s "
+        f"(a cycle in progress finishes first); giving up.[/yellow]"
+    )
+    return False
+
+
+def cmd_stop(args: argparse.Namespace) -> int:
+    """Handle ``factory stop``: graceful daemon shutdown via SIGTERM."""
+    config = _load_config_or_error(args.config)
+    if config is None:
+        return 1
+    if not is_lock_held(config.backlog.with_suffix(".lock")):
+        console.print(f"[yellow]Factory {config.name!r} is not running.[/yellow]")
+        return 1
+    return 0 if _stop_daemon(config, args.timeout) else 1
+
+
+def cmd_restart(args: argparse.Namespace) -> int:
+    """Handle ``factory restart``: stop when running, then start detached."""
+    config = _load_config_or_error(args.config)
+    if config is None:
+        return 1
+    lock_path = config.backlog.with_suffix(".lock")
+    if is_lock_held(lock_path) and not _stop_daemon(config, args.timeout):
+        return 1
+    proc = subprocess.Popen(
+        [sys.executable, "-m", "factory", "start", "--config", str(args.config)],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+    deadline = time.monotonic() + START_TIMEOUT_SECONDS
+    while time.monotonic() < deadline:
+        if is_lock_held(lock_path):
+            console.print(
+                f"[green]Factory {config.name!r} restarted "
+                f"(pid {read_lock_pid(lock_path) or proc.pid}, "
+                f"interval {config.interval_minutes} min).[/green]"
+            )
+            return 0
+        if proc.poll() is not None:
+            break
+        time.sleep(_POLL_SECONDS)
+    console.print(f"[red]Factory daemon did not start; see {config.log_file} for details.[/red]")
+    return 1
+
+
 def cmd_default() -> int:
     """Bare ``factory``: show help when configured, run the wizard otherwise."""
     if DEFAULT_CONFIG.exists():
@@ -385,6 +527,10 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_init(args)
     if args.action == "status":
         return cmd_status(args)
+    if args.action == "stop":
+        return cmd_stop(args)
+    if args.action == "restart":
+        return cmd_restart(args)
     parser.error(f"unknown command: {args.action}")
     return 2
 

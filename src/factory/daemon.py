@@ -31,13 +31,16 @@ def _take_flock(lock_path: str | Path) -> Any | None:
     Uses ``fcntl`` flock so the lock is released automatically when the
     process exits (even on crash). Returns ``None`` when another process
     holds the lock. Falls back to no locking when ``fcntl`` is unavailable.
+    The file is opened without truncation so a failed acquire keeps the
+    running holder's recorded PID intact (``factory stop`` needs it).
     """
     lock_file = Path(lock_path)
     lock_file.parent.mkdir(parents=True, exist_ok=True)
-    handle = lock_file.open("w")
+    handle = lock_file.open("a+")
     try:
         import fcntl
     except ImportError:
+        handle.truncate(0)
         handle.write(f"pid={os.getpid()}\n")
         handle.flush()
         return handle
@@ -46,6 +49,7 @@ def _take_flock(lock_path: str | Path) -> Any | None:
     except OSError:
         handle.close()
         return None
+    handle.truncate(0)
     handle.write(f"pid={os.getpid()}\n")
     handle.flush()
     return handle
@@ -58,6 +62,21 @@ def acquire_run_lock(lock_path: str | Path) -> Any:
     crash). Returns ``None`` when another daemon holds the lock.
     """
     return _take_flock(lock_path)
+
+
+def read_lock_pid(lock_path: str | Path) -> int | None:
+    """Return the PID recorded in the lock file, or ``None`` when unknown."""
+    try:
+        text = Path(lock_path).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    for line in text.splitlines():
+        if line.startswith("pid="):
+            try:
+                return int(line.removeprefix("pid=").strip())
+            except ValueError:
+                return None
+    return None
 
 
 def is_lock_held(lock_path: str | Path) -> bool:

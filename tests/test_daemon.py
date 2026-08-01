@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 
-from factory.daemon import FactoryDaemon, RunLock, acquire_run_lock, is_lock_held
+from factory.daemon import FactoryDaemon, RunLock, acquire_run_lock, is_lock_held, read_lock_pid
 from tests.conftest import make_config
 
 
@@ -91,6 +92,33 @@ def test_run_lock_held_while_active(tmp_path):
             assert blocked is False
     with second.held() as again:
         assert again is True
+
+
+def test_read_lock_pid(tmp_path):
+    lock_path = tmp_path / "factory.lock"
+    assert read_lock_pid(lock_path) is None
+    held = acquire_run_lock(lock_path)
+    try:
+        assert read_lock_pid(lock_path) == os.getpid()
+    finally:
+        held.close()
+
+
+def test_read_lock_pid_garbage(tmp_path):
+    lock_path = tmp_path / "factory.lock"
+    lock_path.write_text("garbage\npid=notanumber\n", encoding="utf-8")
+    assert read_lock_pid(lock_path) is None
+
+
+def test_failed_acquire_keeps_holders_pid(tmp_path):
+    """A second, failing acquire must not wipe the running holder's PID."""
+    lock_path = tmp_path / "factory.lock"
+    held = acquire_run_lock(lock_path)
+    try:
+        assert acquire_run_lock(lock_path) is None
+        assert read_lock_pid(lock_path) == os.getpid()
+    finally:
+        held.close()
 
 
 async def test_daemon_skips_when_previous_run_active(git_repo, tmp_path):

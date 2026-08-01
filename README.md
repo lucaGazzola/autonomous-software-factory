@@ -21,7 +21,11 @@ factory start
 
 `factory init` writes a `factory.yaml` (re-run with `--force` to overwrite;
 bare `factory` also starts the wizard when no config exists). `factory start`
-runs the schedule forever — interrupt it with Ctrl-C. Logs go to `factory.log`.
+runs the schedule forever — interrupt it with Ctrl-C, or stop it from another
+terminal with `factory stop` (graceful: a cycle in progress finishes first).
+`factory restart` stops the daemon and starts it again in the background,
+re-reading `factory.yaml` — use it after editing the config. Logs go to
+`factory.log`.
 
 After you started the daemon, check if it is still running with:
 
@@ -126,7 +130,8 @@ opencode as the agent; runtime state lives under `.factory/` (gitignored).
 ```bash
 pip install -e ".[dev]"          # once
 factory start                    # uses ./factory.yaml
-# restart: Ctrl-C (or kill the process), then factory start again
+factory stop                     # graceful shutdown (SIGTERM; cycle finishes first)
+factory restart                  # stop + start in background, re-reading factory.yaml
 factory status                   # config, backlog counts, next OPEN, daemon up?
 pgrep -af factory                # process check; empty = not running
 tail -f .factory/factory.log     # live log
