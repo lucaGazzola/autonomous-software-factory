@@ -18,8 +18,13 @@ from __future__ import annotations
 import asyncio
 import os
 from abc import ABC, abstractmethod
+from collections import deque
 
 from factory.models import ExecutionResult, ExecutionStatus, RepoContext, Task
+
+# Keep only the most recent process output lines so a chatty agent cannot
+# blow memory; header/footer status lines are added around this window.
+_MAX_OUTPUT_LINES = 1000
 
 
 class BaseAgent(ABC):
@@ -64,6 +69,22 @@ class ShellAgent(BaseAgent):
             lines.extend(f"- {criterion}" for criterion in task.acceptance_criteria)
         return "\n".join(lines)
 
+    @staticmethod
+    async def _drain_stream(
+        stream: asyncio.StreamReader | None,
+        prefix: str,
+        lines: deque[str],
+    ) -> None:
+        """Read ``stream`` line-by-line into ``lines`` until EOF."""
+        if stream is None:
+            return
+        while True:
+            raw = await stream.readline()
+            if not raw:
+                break
+            text = raw.decode(errors="replace").rstrip("\r\n")
+            lines.append(f"[{prefix}] {text}")
+
     async def run_task(self, task: Task, context: RepoContext) -> ExecutionResult:
         """Run the configured command once for the task."""
         logs: list[str] = [f"[{self.name}] Running task {task.id} ({task.title})"]
@@ -100,13 +121,25 @@ class ShellAgent(BaseAgent):
                 error=f"command not found: {exc}",
             )
 
+        stream_lines: deque[str] = deque(maxlen=_MAX_OUTPUT_LINES)
+        readers = asyncio.gather(
+            self._drain_stream(proc.stdout, "stdout", stream_lines),
+            self._drain_stream(proc.stderr, "stderr", stream_lines),
+        )
+
+        timed_out = False
         try:
-            stdout, stderr = await asyncio.wait_for(
-                proc.communicate(), timeout=self.timeout_seconds
-            )
+            await asyncio.wait_for(proc.wait(), timeout=self.timeout_seconds)
         except TimeoutError:
+            timed_out = True
             proc.kill()
             await proc.wait()
+        # Always finish draining so lines already written (and any residual
+        # after kill) are captured before we build the result.
+        await readers
+        logs.extend(stream_lines)
+
+        if timed_out:
             label = f" after {self.timeout_seconds:g}s" if self.timeout_seconds is not None else ""
             logs.append(f"[{self.name}] Execution timed out{label}; process killed.")
             return ExecutionResult(
@@ -114,9 +147,6 @@ class ShellAgent(BaseAgent):
                 output_logs=logs,
                 error=f"timed out{label}",
             )
-
-        logs.extend(f"[stdout] {line}" for line in stdout.decode(errors="replace").splitlines())
-        logs.extend(f"[stderr] {line}" for line in stderr.decode(errors="replace").splitlines())
 
         if proc.returncode == 0:
             logs.append(f"[{self.name}] Task {task.id} finished successfully (exit 0).")

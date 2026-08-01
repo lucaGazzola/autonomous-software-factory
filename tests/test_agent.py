@@ -42,6 +42,30 @@ async def test_timeout_is_error():
     assert "timed out" in (result.error or "")
 
 
+async def test_timeout_includes_streamed_output():
+    """Lines printed before a timeout must appear in output_logs."""
+    agent = ShellAgent(
+        "echo pre-timeout-marker; sleep 5",
+        timeout_seconds=0.5,
+    )
+    result = await agent.run_task(TASK, RepoContext())
+    assert result.status is ExecutionStatus.ERROR
+    assert "timed out" in (result.error or "")
+    assert any("pre-timeout-marker" in line for line in result.output_logs)
+
+
+async def test_output_log_window_is_bounded():
+    """A chatty agent must not retain more than the last 1000 process lines."""
+    # 1500 numbered lines; only the trailing window should remain.
+    agent = ShellAgent("python3 -c \"import sys; [print(i) for i in range(1500)]\"")
+    result = await agent.run_task(TASK, RepoContext())
+    assert result.status is ExecutionStatus.SUCCESS
+    stream = [line for line in result.output_logs if line.startswith(("[stdout]", "[stderr]"))]
+    assert len(stream) == 1000
+    assert stream[0] == "[stdout] 500"
+    assert stream[-1] == "[stdout] 1499"
+
+
 async def test_no_timeout_runs_to_completion():
     agent = ShellAgent("sleep 0.2", timeout_seconds=None)
     result = await agent.run_task(TASK, RepoContext())
