@@ -36,6 +36,8 @@ def _ask_text(input_fn: SetupInput | None, prompt: str, default: str | None = No
     """Free-text question; ``input_fn`` replaces the terminal in tests."""
     if input_fn is not None:
         return input_fn(prompt)
+    if default is None:
+        return Prompt.ask(prompt)
     return Prompt.ask(prompt, default=default)
 
 

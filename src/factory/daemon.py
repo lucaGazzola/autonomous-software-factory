@@ -33,17 +33,18 @@ def _take_flock(lock_path: str | Path) -> Any | None:
     """
     lock_file = Path(lock_path)
     lock_file.parent.mkdir(parents=True, exist_ok=True)
+    handle = lock_file.open("w")
     try:
         import fcntl
     except ImportError:
-        fcntl = None
-    handle = lock_file.open("w")
-    if fcntl is not None:
-        try:
-            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except OSError:
-            handle.close()
-            return None
+        handle.write(f"pid={os.getpid()}\n")
+        handle.flush()
+        return handle
+    try:
+        fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        handle.close()
+        return None
     handle.write(f"pid={os.getpid()}\n")
     handle.flush()
     return handle
