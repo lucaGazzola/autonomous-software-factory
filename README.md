@@ -98,6 +98,41 @@ The exit code decides the outcome:
 Only one agent runs at a time; an iteration that wakes up while the agent is
 still working is skipped, never killed.
 
+## Running the factory on itself
+
+This repo dogfoods the factory. Root `factory.yaml` points at `.` with
+opencode as the agent; runtime state lives under `.factory/` (gitignored).
+
+| Path | Role |
+| --- | --- |
+| `factory.yaml` | Config (committed): repo `.`, branch `main`, 60‑min interval, opencode agent |
+| `.factory/backlog.json` | Task list |
+| `.factory/BLOCKER.md` | Written when the agent needs a human |
+| `.factory/factory.log` | Daemon / cycle log |
+| `.factory/backlog.lock` | Run lock (PID); released on exit |
+
+**Backlog** — edit `.factory/backlog.json` by hand:
+
+- **Add:** append a task with a unique `id`, `title`, `description`, optional
+  `acceptance_criteria`, `"status": "OPEN"`, and `created_at` (ISO‑8601).
+- **Reopen:** set `status` back to `OPEN` (e.g. after fixing a blocker or
+  retrying a `FAILED` task).
+- **Block:** set `status` to `BLOCKED` so the factory pauses and keeps writing
+  the blocker until you set it `OPEN` again (or delete `.factory/BLOCKER.md`
+  for a refactoring block).
+
+**Daemon**
+
+```bash
+pip install -e ".[dev]"          # once
+factory start                    # uses ./factory.yaml
+# restart: Ctrl-C (or kill the process), then factory start again
+factory status                   # config, backlog counts, next OPEN, daemon up?
+pgrep -af factory                # process check; empty = not running
+tail -f .factory/factory.log     # live log
+factory once                     # single cycle without the daemon
+```
+
 ## Develop
 
 ```bash
