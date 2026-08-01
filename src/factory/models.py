@@ -98,6 +98,8 @@ class FactoryConfig(BaseModel):
         refactor_prompt: Instruction used for the refactoring run that
             happens when the backlog has no runnable task.
         log_file: Where the scheduled factory writes its log.
+        web_port: Local HTTP API port (``127.0.0.1`` only). Default 8787;
+            set to ``0`` to disable the server.
     """
 
     name: str = "software-factory"
@@ -114,6 +116,7 @@ class FactoryConfig(BaseModel):
     git_timeout_seconds: float = Field(default=120, gt=0)
     refactor_prompt: str = DEFAULT_REFACTOR_PROMPT
     log_file: str = "factory.log"
+    web_port: int = Field(default=8787, ge=0, le=65535)
 
     @field_validator("agent_command")
     @classmethod

@@ -43,6 +43,7 @@ from factory.daemon import FactoryDaemon, acquire_run_lock, is_lock_held
 from factory.factory import Factory
 from factory.git import GitManager
 from factory.models import FactoryConfig, Task, TaskStatus
+from factory.server import WebServer
 from factory.setup import run_setup
 
 OUTCOME_MARKER = "Run finished: "
@@ -203,11 +204,18 @@ def cmd_start(args: argparse.Namespace) -> int:
         factory = _make_factory(config)
         daemon = FactoryDaemon(config, factory)
         loop = asyncio.get_running_loop()
+        web = WebServer(config, factory.backlog, daemon)
+        web.start(loop)
         for sig in (signal.SIGINT, signal.SIGTERM):
             try:
                 loop.add_signal_handler(sig, daemon.stop)
             except NotImplementedError:
                 pass
+        web_line = (
+            f"\n[bold]Web:[/bold] http://127.0.0.1:{config.web_port}"
+            if config.web_port
+            else ""
+        )
         console.print(
             Panel.fit(
                 f"[bold]Factory:[/bold] {config.name}\n"
@@ -215,12 +223,16 @@ def cmd_start(args: argparse.Namespace) -> int:
                 f"[bold]Interval:[/bold] {config.interval_minutes} min\n"
                 f"[bold]Backlog:[/bold] {config.backlog}\n"
                 f"[bold]Branch:[/bold] {config.branch}\n"
-                f"[bold]Log:[/bold] {config.log_file}",
+                f"[bold]Log:[/bold] {config.log_file}"
+                f"{web_line}",
                 title="Software Factory",
                 border_style="green",
             )
         )
-        await daemon.run_forever()
+        try:
+            await daemon.run_forever()
+        finally:
+            web.stop()
 
     try:
         asyncio.run(_serve())

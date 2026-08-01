@@ -36,3 +36,4 @@ refactor_prompt: |
   make no changes.
 
 log_file: factory.log
+# web_port: 8787                # Local read-only HTTP API on 127.0.0.1 (0 = off).

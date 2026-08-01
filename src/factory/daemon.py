@@ -15,6 +15,7 @@ import logging
 import os
 from collections.abc import Iterator
 from contextlib import contextmanager
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -118,6 +119,9 @@ class FactoryDaemon:
         self.interval_seconds: float = config.interval_minutes * 60.0
         self.run_lock = RunLock(config.backlog.with_suffix(".run"))
         self._stop_event = asyncio.Event()
+        self.pid: int = os.getpid()
+        self.last_outcome: str | None = None
+        self.next_run_at: datetime | None = None
 
     def stop(self) -> None:
         """Request a graceful shutdown after the current cycle."""
@@ -140,9 +144,12 @@ class FactoryDaemon:
                         outcome = "skipped"
                     else:
                         outcome = await self.factory.run_cycle()
+                self.last_outcome = outcome
                 logger.info("Run finished: %s", outcome)
             except Exception:
+                self.last_outcome = "error"
                 logger.exception("Run crashed; continuing on the next interval.")
+            self.next_run_at = datetime.now(UTC) + timedelta(seconds=self.interval_seconds)
             try:
                 await asyncio.wait_for(self._stop_event.wait(), timeout=self.interval_seconds)
             except TimeoutError:
