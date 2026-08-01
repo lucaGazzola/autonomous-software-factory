@@ -7,6 +7,8 @@ repo: /path/to/repository       # The git repository the factory works on.
 interval_minutes: 60            # How often the factory runs.
 branch: main                    # Everything is committed to this branch (no feature branches).
 remote: origin                  # Git remote to push to; omit to only commit locally.
+# git_timeout_seconds: 120      # Kill a stuck git command after this many seconds
+                                # (default 120). Raise for slow remotes.
 
 backlog: backlog.json           # The task backlog (created on first use). Keep it
                                 # outside the repository so it is never committed.

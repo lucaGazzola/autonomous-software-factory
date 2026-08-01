@@ -19,8 +19,11 @@ class GitError(RuntimeError):
 class GitManager:
     """Run git commands against a single repository (via the git CLI)."""
 
-    def __init__(self, repo_path: str | Path) -> None:
+    def __init__(
+        self, repo_path: str | Path, *, timeout_seconds: float = 120
+    ) -> None:
         self.repo_path = Path(repo_path)
+        self.timeout_seconds = timeout_seconds
 
     def _run(self, *args: str, check: bool = True) -> str:
         """Execute ``git -C <repo> <args>`` and return combined output."""
@@ -32,7 +35,7 @@ class GitManager:
                 capture_output=True,
                 text=True,
                 check=False,
-                timeout=120,
+                timeout=self.timeout_seconds,
             )
         except subprocess.TimeoutExpired as exc:
             raise GitError(f"git {args[0]} timed out") from exc

@@ -93,6 +93,8 @@ class FactoryConfig(BaseModel):
         remote: Git remote to push to (e.g. ``origin``). When omitted the
             factory only commits locally.
         branch: Branch everything is committed to (default ``main``).
+        git_timeout_seconds: Kill a git subprocess after this many seconds
+            (default 120). Raise for slow remotes.
         refactor_prompt: Instruction used for the refactoring run that
             happens when the backlog has no runnable task.
         log_file: Where the scheduled factory writes its log.
@@ -109,6 +111,7 @@ class FactoryConfig(BaseModel):
     blocked_exit_code: int = Field(default=2)
     remote: str | None = None
     branch: str = "main"
+    git_timeout_seconds: float = Field(default=120, gt=0)
     refactor_prompt: str = DEFAULT_REFACTOR_PROMPT
     log_file: str = "factory.log"
 

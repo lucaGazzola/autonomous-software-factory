@@ -177,7 +177,12 @@ def _make_factory(config: FactoryConfig) -> Factory:
         env=config.agent_env,
         blocked_exit_code=config.blocked_exit_code,
     )
-    return Factory(config, backlog, agent, GitManager(config.repo))
+    return Factory(
+        config,
+        backlog,
+        agent,
+        GitManager(config.repo, timeout_seconds=config.git_timeout_seconds),
+    )
 
 
 def cmd_start(args: argparse.Namespace) -> int:
