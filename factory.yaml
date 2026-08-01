@@ -2,7 +2,7 @@
 # Relative paths resolve against this file's directory.
 name: autonomous-software-factory
 repo: .
-interval_minutes: 60
+interval_minutes: 360
 branch: main
 remote: origin
 

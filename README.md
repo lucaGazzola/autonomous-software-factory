@@ -105,7 +105,7 @@ opencode as the agent; runtime state lives under `.factory/` (gitignored).
 
 | Path | Role |
 | --- | --- |
-| `factory.yaml` | Config (committed): repo `.`, branch `main`, 60‑min interval, opencode agent |
+| `factory.yaml` | Config (committed): repo `.`, branch `main`, 6‑hour interval (360 min), opencode agent |
 | `.factory/backlog.json` | Task list |
 | `.factory/BLOCKER.md` | Written when the agent needs a human |
 | `.factory/factory.log` | Daemon / cycle log |
