@@ -13,11 +13,17 @@ A scheduled, agent-driven software factory for one repository. Every
 
 ## Setup
 
+Requires Python 3.11+. Install the `factory` CLI from the public GitHub
+remote with the one-liner:
+
 ```bash
-pip install -e ".[dev]"
+curl -fsSL https://raw.githubusercontent.com/lucaGazzola/autonomous-software-factory/main/install.sh | bash
 factory init          # guided setup: folder, agent command, refactor prompt
 factory start
 ```
+
+The installer prefers `pipx` and falls back to `pip install --user`; it never
+needs root, and re-running it upgrades the install.
 
 `factory init` writes a `factory.yaml` (re-run with `--force` to overwrite;
 bare `factory` also starts the wizard when no config exists). `factory start`
@@ -143,5 +149,6 @@ factory once                     # single cycle without the daemon
 ## Develop
 
 ```bash
+pip install -e ".[dev]"
 pytest   # backlog, git, agent, factory cycles, daemon
 ```
