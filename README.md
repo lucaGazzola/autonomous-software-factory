@@ -25,23 +25,70 @@ factory start
 The installer prefers `pipx` and falls back to `pip install --user`; it never
 needs root, and re-running it upgrades the install.
 
-`factory init` writes a `factory.yaml` (re-run with `--force` to overwrite;
-bare `factory` also starts the wizard when no config exists). `factory start`
-runs the schedule forever — interrupt it with Ctrl-C, or stop it from another
-terminal with `factory stop` (graceful: a cycle in progress finishes first).
-`factory restart` stops the daemon and starts it again in the background,
-re-reading `factory.yaml` — use it after editing the config. Logs go to
-`factory.log`.
+## Running the factory
 
-After you started the daemon, check if it is still running with:
+All commands below read `factory.yaml` from the current directory; pass
+`--config <file>` to use a different one.
+
+### First-time setup
 
 ```bash
-pgrep -af factory    # shows the daemon process; empty output = not running
+factory init             # guided wizard: repo folder, agent command, refactor prompt
+factory init --force     # overwrite an existing factory.yaml
 ```
 
-The daemon also writes a PID to a lock file next to the backlog
-(`backlog.lock`); the lock is released automatically when the process exits,
-even on a crash, so a leftover file alone does not mean it is still running.
+`factory init` writes a `factory.yaml`. Bare `factory` (no subcommand) starts
+the wizard when no config exists, and prints the CLI help once a config is
+present.
+
+### Start the daemon
+
+```bash
+factory start                        # run the schedule forever
+factory start --interval-minutes 5   # override the interval for this run
+```
+
+The daemon wakes up every `interval_minutes` and runs one cycle (pick the
+oldest `OPEN` task, or a refactoring pass when the backlog is empty). It runs
+in the foreground — interrupt it with Ctrl-C, or stop it from another
+terminal with `factory stop`. Logs go to `factory.log` (rotating: 5 MB × 3),
+and a local web dashboard is served at <http://127.0.0.1:8787> (disable it
+with `web_port: 0` in the config).
+
+### Run a single cycle
+
+```bash
+factory once    # run exactly one cycle and exit; no daemon needed
+```
+
+`factory once` shares the run lock with the daemon, so it never overlaps a
+running `factory start` — useful to test a config or process a backlog
+without leaving a daemon up.
+
+### Check status
+
+```bash
+factory status    # config, backlog counts, next OPEN task, daemon up?, last outcome
+pgrep -af factory # process check; empty output = not running
+```
+
+### Stop and restart
+
+```bash
+factory stop                # graceful shutdown (SIGTERM; a cycle in progress finishes first)
+factory stop --timeout 60   # wait at most 60 s for the daemon to exit
+factory restart             # stop, then start again in the background, re-reading factory.yaml
+```
+
+The daemon reads `factory.yaml` only at startup, so after editing the config
+use `factory restart` — it re-reads the file.
+
+### Where state lives
+
+- `factory.log` — daemon / cycle log (also shown in the web dashboard).
+- `backlog.lock` — lock file next to the backlog, holding the daemon PID. It
+  is released automatically when the process exits, even on a crash, so a
+  leftover file alone does not mean the daemon is still running.
 
 ## The backlog
 
@@ -82,6 +129,9 @@ application you want to build.
 | `agent_env` | Extra environment variables for the agent process. |
 | `blocked_exit_code` | Exit code meaning "needs human input" (default `2`). |
 | `refactor_prompt` | Instruction used when the backlog is empty. |
+| `log_file` | Where the daemon writes its log (default `factory.log`). |
+| `web_port` | Local web dashboard port (default `8787`; `0` disables the server). |
+| `git_timeout_seconds` | Kill a git subprocess after this many seconds (default `120`). |
 | `telegram_bot_token` | Optional Telegram bot token for blocked-run notifications (disabled unless `telegram_chat_id` is also set). |
 | `telegram_chat_id` | Optional chat ID that receives blocked-run notifications (disabled unless `telegram_bot_token` is also set). |
 
@@ -109,42 +159,6 @@ The exit code decides the outcome:
 
 Only one agent runs at a time; an iteration that wakes up while the agent is
 still working is skipped, never killed.
-
-## Running the factory on itself
-
-This repo dogfoods the factory. Root `factory.yaml` points at `.` with
-opencode as the agent; runtime state lives under `.factory/` (gitignored).
-
-| Path | Role |
-| --- | --- |
-| `factory.yaml` | Config (committed): repo `.`, branch `main`, 6‑hour interval (360 min), opencode agent |
-| `.factory/backlog.json` | Task list |
-| `.factory/BLOCKER.md` | Written when the agent needs a human |
-| `.factory/factory.log` | Daemon / cycle log |
-| `.factory/backlog.lock` | Run lock (PID); released on exit |
-
-**Backlog** — edit `.factory/backlog.json` by hand:
-
-- **Add:** append a task with a unique `id`, `title`, `description`, optional
-  `acceptance_criteria`, `"status": "OPEN"`, and `created_at` (ISO‑8601).
-- **Reopen:** set `status` back to `OPEN` (e.g. after fixing a blocker or
-  retrying a `FAILED` task).
-- **Block:** set `status` to `BLOCKED` so the factory pauses and keeps writing
-  the blocker until you set it `OPEN` again (or delete `.factory/BLOCKER.md`
-  for a refactoring block).
-
-**Daemon**
-
-```bash
-pip install -e ".[dev]"          # once
-factory start                    # uses ./factory.yaml
-factory stop                     # graceful shutdown (SIGTERM; cycle finishes first)
-factory restart                  # stop + start in background, re-reading factory.yaml
-factory status                   # config, backlog counts, next OPEN, daemon up?
-pgrep -af factory                # process check; empty = not running
-tail -f .factory/factory.log     # live log
-factory once                     # single cycle without the daemon
-```
 
 ## Develop
 
