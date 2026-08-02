@@ -169,25 +169,4 @@ pytest   # backlog, git, agent, factory cycles, daemon
 
 ## Documentation
 
-The reference documentation is a [MkDocs Material](https://squidfunk.github.io/mkdocs-material/)
-site built from the Markdown sources in [`docs/`](docs/). It covers the
-architecture, installation, every `factory.yaml` key, the backlog format, the
-agent contract, the CLI, the web console / HTTP API, and running the factory
-on itself.
-
-Hosting is temporary on this server for now; public hosting is a later step.
-To build and serve it locally:
-
-```bash
-pip install -e ".[docs]"          # installs mkdocs-material (docs-only extra)
-mkdocs serve -a 127.0.0.1:8000    # live-reloading preview while editing
-```
-
-or build a static site and serve it with any static file server:
-
-```bash
-mkdocs build                      # warning-free; run `mkdocs build --strict` to enforce
-python -m http.server -d site 8000
-```
-
-Open <http://127.0.0.1:8000> in a browser.
+You can find the complete docs here: **[https://forgeo.org/](https://forgeo.org/)**
