@@ -13,7 +13,7 @@ use `factory restart` so it re-reads the file.
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `name` | `software-factory` | Display name (logs, commit messages, Telegram notifications). |
+| `name` | `forgeo` | Display name (logs, commit messages, Telegram notifications). |
 | `repo` | `.` | The git repository the factory works on. |
 | `interval_minutes` | `60` | How often the factory runs (≥ 1). |
 | `branch` | `main` | The single branch everything is committed to. |

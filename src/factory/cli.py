@@ -272,7 +272,7 @@ def cmd_start(args: argparse.Namespace) -> int:
                 f"[bold]Branch:[/bold] {config.branch}\n"
                 f"[bold]Log:[/bold] {config.log_file}"
                 f"{web_line}",
-                title="Software Factory",
+                title="Forgeo",
                 border_style="green",
             )
         )

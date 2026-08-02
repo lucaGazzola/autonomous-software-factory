@@ -292,7 +292,7 @@ class Factory:
     async def _write_blocker(self, entries: list[BlockerEntry]) -> None:
         """Write the blocker file with a detailed explanation of every block."""
         sections: list[str] = [
-            "# BLOCKER: the software factory needs your input",
+            "# BLOCKER: Forgeo needs your input",
             "",
             "The coding agent could not finish without a human decision. The",
             f"factory is paused until this is resolved. Backlog: `{self.config.backlog}`.",

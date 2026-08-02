@@ -1,13 +1,13 @@
 # Running the factory on itself
 
 This repository dogfoods the factory: it runs the factory on the factory. The
-`factory.yaml` at the repository root schedules the `autonomous-software-factory`
+`factory.yaml` at the repository root schedules `forgeo`
 to work on its own codebase, commit on `main`, and push to `origin`.
 
 ## The dogfooding config
 
 ```yaml
-name: autonomous-software-factory
+name: forgeo
 repo: .
 interval_minutes: 360
 branch: main

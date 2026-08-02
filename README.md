@@ -1,4 +1,4 @@
-# Software Factory
+# Forgeo
 
 A scheduled, agent-driven software factory for one repository. Every
 `interval_minutes` it:
@@ -17,7 +17,7 @@ Requires Python 3.11+. Install the `factory` CLI from the public GitHub
 remote with the one-liner:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/lucaGazzola/autonomous-software-factory/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/lucaGazzola/forgeo/main/install.sh | bash
 factory init          # guided setup: folder, agent command, refactor prompt
 factory start
 ```

@@ -106,7 +106,7 @@ class FactoryConfig(BaseModel):
             Disabled unless ``telegram_bot_token`` is also set.
     """
 
-    name: str = "software-factory"
+    name: str = "forgeo"
     repo: Path = Field(default=Path("."))
     interval_minutes: int = Field(default=60, ge=1)
     backlog: Path = Field(default=Path("backlog.json"))

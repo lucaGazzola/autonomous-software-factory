@@ -3,13 +3,13 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "software-factory"
+name = "forgeo"
 version = "0.1.0"
 description = "A scheduled software factory: executes backlog tasks on main, refactors when idle, and writes BLOCKER.md when it needs human input."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
-authors = [{ name = "Software Factory Contributors" }]
+authors = [{ name = "Forgeo Contributors" }]
 keywords = ["automation", "agents", "backlog", "orchestration", "scheduler"]
 classifiers = [
     "Development Status :: 3 - Alpha",

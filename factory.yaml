@@ -1,6 +1,6 @@
-# Software Factory configuration — the factory dogfooding itself.
+# Forgeo configuration — the factory dogfooding itself.
 # Relative paths resolve against this file's directory.
-name: autonomous-software-factory
+name: forgeo
 repo: .
 interval_minutes: 360
 branch: main

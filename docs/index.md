@@ -1,4 +1,4 @@
-# Software Factory
+# Forgeo
 
 A **scheduled, agent-driven software factory** for one repository. Every
 `interval_minutes` the factory wakes up and runs exactly one of three things:
