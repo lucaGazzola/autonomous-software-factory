@@ -37,3 +37,10 @@ refactor_prompt: |
 
 log_file: factory.log
 # web_port: 8787                # Local read-only HTTP API on 127.0.0.1 (0 = off).
+
+# Optional Telegram notifications when a task (or refactoring pass) turns
+# BLOCKED. Set both keys to enable; omit to disable. The message includes the
+# factory name, the task id and title, and the first lines of the blocker
+# reason. Uses the stdlib only; a failed notification never affects the run.
+# telegram_bot_token: "123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11"
+# telegram_chat_id: "-1001234567890"

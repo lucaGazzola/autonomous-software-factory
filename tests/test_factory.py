@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import logging
+import urllib.parse
+from typing import Self
+
 from factory.backlog import JSONBacklog
 from factory.factory import Factory
 from factory.git import GitManager
@@ -15,6 +19,18 @@ def make_factory(git_repo, tmp_path, **overrides) -> tuple[Factory, FakeAgent, J
     backlog = JSONBacklog(config.backlog)
     factory = Factory(config, backlog, agent, GitManager(git_repo))
     return factory, agent, backlog
+
+
+class FakeResponse:
+    """A minimal ``urllib`` response: 200 OK and context-manager support."""
+
+    status = 200
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(self, *exc: object) -> bool:
+        return False
 
 
 async def test_task_success_is_committed_on_main(git_repo, tmp_path):
@@ -109,6 +125,102 @@ async def test_blocked_task_pauses_until_reopened(git_repo, tmp_path):
 
     assert (await backlog.get_task("TASK-001")).status is TaskStatus.COMPLETED
     assert not factory.config.blocker_file.exists()
+
+
+async def test_blocked_task_sends_telegram_message(git_repo, tmp_path, monkeypatch):
+    factory, agent, backlog = make_factory(
+        git_repo, tmp_path, telegram_bot_token="TOKEN", telegram_chat_id="CHAT"
+    )
+    await backlog.create_task(make_task(description="Decide the retry policy."))
+    agent.result = ExecutionResult(
+        status=ExecutionStatus.BLOCKED,
+        questions=["Which retry policy should I use?"],
+    )
+    agent.effect = lambda: (git_repo / "wip.txt").write_text("partial\n", encoding="utf-8")
+
+    captured = {"calls": 0}
+
+    def fake_urlopen(request, **kwargs):
+        captured["calls"] += 1
+        captured["url"] = request.full_url
+        captured["data"] = urllib.parse.parse_qs(request.data.decode("utf-8"))
+        return FakeResponse()
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+
+    await factory.run_cycle()
+
+    assert captured["calls"] == 1
+    assert (await backlog.get_task("TASK-001")).status is TaskStatus.BLOCKED
+    assert captured["url"] == "https://api.telegram.org/botTOKEN/sendMessage"
+    assert captured["data"]["chat_id"] == ["CHAT"]
+    text = captured["data"]["text"][0]
+    assert "test-factory" in text
+    assert "TASK-001: Do the thing" in text
+    assert "Which retry policy should I use?" in text
+
+
+async def test_no_telegram_message_when_not_configured(git_repo, tmp_path, monkeypatch):
+    factory, agent, backlog = make_factory(git_repo, tmp_path)
+    await backlog.create_task(make_task())
+    agent.result = ExecutionResult(status=ExecutionStatus.BLOCKED, questions=["?"])
+
+    calls = []
+
+    def fake_urlopen(request, **kwargs):
+        calls.append(request)
+        return FakeResponse()
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+
+    await factory.run_cycle()
+
+    assert calls == []
+    assert (await backlog.get_task("TASK-001")).status is TaskStatus.BLOCKED
+
+
+async def test_telegram_failure_logs_warning_and_keeps_outcome(
+    git_repo, tmp_path, monkeypatch, caplog
+):
+    factory, agent, backlog = make_factory(
+        git_repo, tmp_path, telegram_bot_token="TOKEN", telegram_chat_id="CHAT"
+    )
+    await backlog.create_task(make_task())
+    agent.result = ExecutionResult(status=ExecutionStatus.BLOCKED, questions=["?"])
+
+    def boom(request, **kwargs):
+        raise OSError("network down")
+
+    monkeypatch.setattr("urllib.request.urlopen", boom)
+
+    with caplog.at_level(logging.WARNING):
+        outcome = await factory.run_cycle()
+
+    assert outcome == "task"
+    assert (await backlog.get_task("TASK-001")).status is TaskStatus.BLOCKED
+    assert factory.config.blocker_file.exists()
+    assert any("Telegram notification failed" in r.message for r in caplog.records)
+
+
+async def test_refactor_blocked_sends_telegram_message(git_repo, tmp_path, monkeypatch):
+    factory, agent, _backlog = make_factory(
+        git_repo, tmp_path, telegram_bot_token="TOKEN", telegram_chat_id="CHAT"
+    )
+    agent.result = ExecutionResult(status=ExecutionStatus.BLOCKED, questions=["License question?"])
+
+    captured = {}
+
+    def fake_urlopen(request, **kwargs):
+        captured["data"] = urllib.parse.parse_qs(request.data.decode("utf-8"))
+        return FakeResponse()
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+
+    await factory.run_cycle()
+
+    text = captured["data"]["text"][0]
+    assert "REFACTOR: Refactoring pass" in text
+    assert "License question?" in text
 
 
 async def test_refactor_pass_when_backlog_empty(git_repo, tmp_path):

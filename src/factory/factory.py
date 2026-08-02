@@ -31,6 +31,7 @@ from factory.models import (
     Task,
     TaskStatus,
 )
+from factory.notify import BlockedNotice, send_blocked_notice
 
 logger = logging.getLogger(__name__)
 
@@ -160,16 +161,14 @@ class Factory:
 
         if result.status is ExecutionStatus.BLOCKED:
             if await self._commit_and_push(blocked_message, task=task):
-                await self._write_blocker(
-                    [
-                        BlockerEntry(
-                            task=task,
-                            result=result,
-                            instruction=instruction,
-                            is_refactor=is_refactor,
-                        )
-                    ]
+                entry = BlockerEntry(
+                    task=task,
+                    result=result,
+                    instruction=instruction,
+                    is_refactor=is_refactor,
                 )
+                await self._write_blocker([entry])
+                self._notify_blocked(entry)
             if is_refactor:
                 logger.warning("Refactoring pass is BLOCKED; blocker file written.")
             else:
@@ -274,6 +273,21 @@ class Factory:
             lines.append("Acceptance criteria:")
             lines.extend(f"- {criterion}" for criterion in task.acceptance_criteria)
         return "\n".join(lines)
+
+    def _notify_blocked(self, entry: BlockerEntry) -> None:
+        """Send a Telegram notification for a newly blocked task or refactor pass.
+
+        The message contains the factory name, the task id and title, and the
+        first lines of the blocker reason. Notifications are optional and never
+        change the outcome of the cycle: a failure is only logged.
+        """
+        reason = entry.result.questions or entry.result.output_logs
+        notice = BlockedNotice(
+            task_id=entry.task.id,
+            task_title=entry.task.title,
+            reason="\n".join(reason) if reason else "The agent did not explain what it needs.",
+        )
+        send_blocked_notice(self.config, notice)
 
     async def _write_blocker(self, entries: list[BlockerEntry]) -> None:
         """Write the blocker file with a detailed explanation of every block."""

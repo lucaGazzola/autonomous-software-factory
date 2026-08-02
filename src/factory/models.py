@@ -100,6 +100,10 @@ class FactoryConfig(BaseModel):
         log_file: Where the scheduled factory writes its log.
         web_port: Local HTTP API port (``127.0.0.1`` only). Default 8787;
             set to ``0`` to disable the server.
+        telegram_bot_token: Telegram bot token for blocked-run
+            notifications. Disabled unless ``telegram_chat_id`` is also set.
+        telegram_chat_id: Chat ID that receives blocked-run notifications.
+            Disabled unless ``telegram_bot_token`` is also set.
     """
 
     name: str = "software-factory"
@@ -117,6 +121,8 @@ class FactoryConfig(BaseModel):
     refactor_prompt: str = DEFAULT_REFACTOR_PROMPT
     log_file: str = "factory.log"
     web_port: int = Field(default=8787, ge=0, le=65535)
+    telegram_bot_token: str | None = None
+    telegram_chat_id: str | None = None
 
     @field_validator("agent_command")
     @classmethod

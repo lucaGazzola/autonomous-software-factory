@@ -76,6 +76,8 @@ application you want to build.
 | `agent_env` | Extra environment variables for the agent process. |
 | `blocked_exit_code` | Exit code meaning "needs human input" (default `2`). |
 | `refactor_prompt` | Instruction used when the backlog is empty. |
+| `telegram_bot_token` | Optional Telegram bot token for blocked-run notifications (disabled unless `telegram_chat_id` is also set). |
+| `telegram_chat_id` | Optional chat ID that receives blocked-run notifications (disabled unless `telegram_bot_token` is also set). |
 
 Relative paths resolve against the config file's directory.
 
