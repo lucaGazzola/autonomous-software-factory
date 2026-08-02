@@ -1,0 +1,102 @@
+# Agent contract
+
+The coding agent is **any shell command** — a CLI coding tool (aider, Claude
+Code, a custom script) or a plain command. It must be able to:
+
+1. read the task from the `FACTORY_TASK` environment variable,
+2. work on the repository from the current working directory,
+3. report its outcome through its **exit code**.
+
+Anything a CLI agent can do works:
+
+```yaml
+agent_command: "claude -p \"$FACTORY_TASK\""
+```
+
+## Environment
+
+The agent is launched with the **repository as its working directory**, and
+the process environment is augmented as follows:
+
+| Variable | Meaning |
+| --- | --- |
+| `FACTORY_TASK` | The full instruction for this run: title, blank line, description, and an "Acceptance criteria:" list when present. |
+| `FACTORY_REPO` | The absolute path of the repository. |
+| `FACTORY_BRANCH` | The branch everything is committed to (default `main`). |
+| *every `agent_env` key* | Any extra variables from `agent_env` in the config. |
+| *inherited environment* | The daemon's own environment. |
+
+`FACTORY_*` variables are set unconditionally and take precedence over both the
+inherited environment and `agent_env`.
+
+For a refactoring run (empty backlog) the same contract applies: the refactor
+prompt arrives as `FACTORY_TASK` with the task id `REFACTOR` and title
+"Refactoring pass".
+
+## Exit codes
+
+The exit code decides the outcome of the run:
+
+| Exit code | Outcome | What happens |
+| --- | --- | --- |
+| `0` | **SUCCESS** | Everything is committed (`git add -A && git commit`) with the message `factory: <title> (#<id>)`, pushed when a remote is set, and the task is marked `COMPLETED`. |
+| `blocked_exit_code` (default `2`) | **BLOCKED** | The agent needs a human decision. Partial work is committed as `factory: <title> (#<id>) [partial]`, `BLOCKER.md` is written explaining what you must do, an optional Telegram notification is sent, and the task is marked `BLOCKED`. |
+| anything else | **ERROR** | Changes are discarded (`git reset --hard` + `git clean -fd`), the failure is logged, and the task is marked `FAILED`. |
+
+The blocked exit code is configurable via `blocked_exit_code` in
+[factory.yaml](configuration.md).
+
+## Timeouts
+
+`agent_timeout_seconds` (optional) kills the agent process after the given
+number of seconds:
+
+- on timeout the process is killed and the task fails as an ERROR
+  (`error: timed out after <n>s`);
+- output captured before the kill is kept in the run log;
+- when unset (`null`), the agent runs to completion — there is no default
+  timeout.
+
+A run that overruns `interval_minutes` is **never killed by the schedule**. The
+daemon skips the next iteration instead: only one agent runs at a time, and an
+iteration that wakes up while the previous run is still active is skipped, not
+interrupted.
+
+!!! tip
+
+    Set `agent_timeout_seconds` to something comfortably above your expected
+    agent runtime. For long interactive agents it is often safer to leave it
+    unset and rely on the skip-on-overlap behavior.
+
+## Output
+
+The agent's stdout and stderr are captured live, prefixed with `[stdout]` /
+`[stderr]`, and retained in the run result. To keep memory bounded, only the
+**last 1000 lines** are kept for a chatty agent. On a BLOCKED result, the
+captured output lines are used as the "what the agent needs" section of
+`BLOCKER.md` (up to the last 10 lines).
+
+## Git contract
+
+The agent should **not** commit or push anything itself — the factory does
+that, based on the exit code. The working contract is:
+
+- make your changes in the repository;
+- **do not** run `git add`, `git commit`, `git push`, or reset the tree;
+- exit `0` to have your changes committed and pushed as one commit;
+- exit `blocked_exit_code` to have partial work preserved and a blocker
+  written;
+- exit anything else to have your changes discarded.
+
+This is why the dogfooded `agent_command` in this repository explicitly
+instructs the agent: *"Do NOT run git commit, git push, or git add -A — the
+factory commits your work itself."*
+
+## Concurrency
+
+Only one agent runs at a time per factory:
+
+- the daemon holds a per-factory lock (`backlog.lock`) — a second `start` or
+  `once` is refused while it is held;
+- each cycle holds a per-iteration lock (`backlog.run`) — a wake-up that finds
+  a run still in progress is skipped.

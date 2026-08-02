@@ -1,0 +1,48 @@
+site_name: Software Factory
+site_description: A scheduled, agent-driven software factory for one repository.
+repo_url: https://github.com/lucaGazzola/autonomous-software-factory
+repo_name: lucaGazzola/autonomous-software-factory
+site_dir: site
+docs_dir: docs
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - navigation.instant
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+    - search.suggest
+    - search.highlight
+
+markdown_extensions:
+  - admonition
+  - toc:
+      permalink: true
+  - pymdownx.superfences
+  - pymdownx.highlight
+  - pymdownx.snippets
+  - pymdownx.magiclink
+
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - Configuration: configuration.md
+  - Backlog format: backlog.md
+  - Agent contract: agent-contract.md
+  - CLI reference: cli-reference.md
+  - Web console & HTTP API: web-console-api.md
+  - Running the factory on itself: running-on-itself.md

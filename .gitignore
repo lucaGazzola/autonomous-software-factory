@@ -17,3 +17,6 @@ factory.log
 htmlcov/
 .ruff_cache/
 .idea/
+
+# Docs build output
+site/
