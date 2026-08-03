@@ -20,3 +20,6 @@ htmlcov/
 
 # Docs build output
 site/
+
+# AI assistant context
+CONTEXT.md
