@@ -170,6 +170,10 @@ pip install -e ".[dev]"
 pytest   # backlog, git, agent, factory cycles, daemon
 ```
 
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the development setup, quality
+gates (`pytest`, `ruff check`, `mypy src/factory`), how to write a backlog
+task, and the pull-request process.
+
 ## Documentation
 
 You can find the complete docs here: **[https://forgeo.org/](https://forgeo.org/)**
