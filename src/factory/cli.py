@@ -50,6 +50,7 @@ from factory.daemon import FactoryDaemon, acquire_run_lock, is_lock_held, read_l
 from factory.factory import Factory
 from factory.git import GitManager
 from factory.models import FactoryConfig, Task, TaskStatus
+from factory.runs import RunRecorder, runs_path_for
 from factory.server import WebServer
 from factory.setup import run_setup
 
@@ -361,6 +362,18 @@ def last_outcome_from_log(log_file: str | Path) -> str | None:
     return outcome
 
 
+def last_outcome_from_runs(config: FactoryConfig) -> str | None:
+    """Return the last run's outcome from ``runs.jsonl``, or ``None``.
+
+    Never raises on a missing or corrupt file; corrupt lines are skipped
+    with a warning.
+    """
+    last_run = RunRecorder(runs_path_for(config.backlog)).read_last()
+    if last_run is None:
+        return None
+    return last_run.outcome.value
+
+
 def render_status(
     config: FactoryConfig,
     tasks: list[Task],
@@ -397,7 +410,7 @@ def cmd_status(args: argparse.Namespace) -> int:
     config = load_config(args.config)
     tasks = asyncio.run(JSONBacklog(config.backlog).list_tasks())
     daemon_running = is_lock_held(config.backlog.with_suffix(".lock"))
-    last_outcome = last_outcome_from_log(config.log_file)
+    last_outcome = last_outcome_from_runs(config)
     console.print(
         render_status(
             config,

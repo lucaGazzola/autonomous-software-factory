@@ -19,11 +19,13 @@ from factory.cli import (
     cmd_status,
     cmd_stop,
     last_outcome_from_log,
+    last_outcome_from_runs,
     next_open_task,
     render_status,
 )
 from factory.daemon import acquire_run_lock, is_lock_held, read_lock_pid
-from factory.models import TaskStatus
+from factory.models import RunKind, RunOutcome, RunRecord, TaskStatus
+from factory.runs import RunRecorder, runs_path_for
 from tests.conftest import make_config, make_task
 
 
@@ -270,10 +272,18 @@ def test_status_prints_summary_and_exits_zero(git_repo, tmp_path, capsys):
         ),
         encoding="utf-8",
     )
-    log = tmp_path / "factory.log"
-    log.write_text(
-        "2026-08-01 02:00:01 INFO     factory.daemon: Run finished: task\n",
-        encoding="utf-8",
+    RunRecorder(runs_path_for(backlog)).append(
+        RunRecord(
+            started_at=datetime(2026, 8, 1, 1, 0, tzinfo=UTC),
+            finished_at=datetime(2026, 8, 1, 1, 0, 5, tzinfo=UTC),
+            kind=RunKind.TASK,
+            task_id="TASK-001",
+            task_title="First open",
+            outcome=RunOutcome.SUCCESS,
+            agent_exit_code=0,
+            commit_sha="abc1234",
+            duration_seconds=5.0,
+        )
     )
 
     assert cmd_status(status_args(config_path)) == 0
@@ -283,7 +293,73 @@ def test_status_prints_summary_and_exits_zero(git_repo, tmp_path, capsys):
     assert "COMPLETED=1" in out
     assert "next: TASK-001 — First open" in out
     assert "daemon: not running" in out
-    assert "last outcome: task" in out
+    assert "last outcome: SUCCESS" in out
+
+
+def test_status_renders_last_run_from_runs(git_repo, tmp_path, capsys):
+    config_path = write_config(git_repo, tmp_path)
+    recorder = RunRecorder(runs_path_for(tmp_path / "backlog.json"))
+    recorder.append(
+        RunRecord(
+            started_at=datetime(2026, 8, 1, 1, 0, tzinfo=UTC),
+            finished_at=datetime(2026, 8, 1, 1, 0, 5, tzinfo=UTC),
+            kind=RunKind.REFACTOR,
+            outcome=RunOutcome.BLOCKED,
+            agent_exit_code=2,
+            duration_seconds=5.0,
+        )
+    )
+    recorder.append(
+        RunRecord(
+            started_at=datetime(2026, 8, 1, 2, 0, tzinfo=UTC),
+            finished_at=datetime(2026, 8, 1, 2, 0, 5, tzinfo=UTC),
+            kind=RunKind.TASK,
+            task_id="TASK-001",
+            task_title="First open",
+            outcome=RunOutcome.ERROR,
+            agent_exit_code=3,
+            duration_seconds=5.0,
+        )
+    )
+
+    assert cmd_status(status_args(config_path)) == 0
+    assert "last outcome: ERROR" in capsys.readouterr().out
+
+
+def test_status_works_with_missing_runs(git_repo, tmp_path, capsys):
+    config_path = write_config(git_repo, tmp_path)
+    assert not (tmp_path / "runs.jsonl").exists()
+
+    assert cmd_status(status_args(config_path)) == 0
+    assert "last outcome: (none)" in capsys.readouterr().out
+
+
+def test_last_outcome_from_runs_missing(tmp_path):
+    config = make_config(tmp_path, tmp_path)
+    assert last_outcome_from_runs(config) is None
+
+
+def test_last_outcome_from_runs_skips_corrupt(tmp_path, caplog):
+    import logging
+
+    config = make_config(tmp_path, tmp_path)
+    recorder = RunRecorder(runs_path_for(config.backlog))
+    recorder.append(
+        RunRecord(
+            started_at=datetime(2026, 8, 1, 1, 0, tzinfo=UTC),
+            finished_at=datetime(2026, 8, 1, 1, 0, 5, tzinfo=UTC),
+            kind=RunKind.TASK,
+            task_id="TASK-001",
+            outcome=RunOutcome.SUCCESS,
+            duration_seconds=5.0,
+        )
+    )
+    recorder.path.write_text(
+        recorder.path.read_text(encoding="utf-8") + "{not json\n", encoding="utf-8"
+    )
+    with caplog.at_level(logging.WARNING, logger="factory.runs"):
+        assert last_outcome_from_runs(config) == "SUCCESS"
+    assert "corrupt" in caplog.text
 
 
 def test_status_works_with_missing_backlog(git_repo, tmp_path, capsys):

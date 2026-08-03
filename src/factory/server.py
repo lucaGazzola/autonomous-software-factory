@@ -21,12 +21,15 @@ from urllib.parse import parse_qs, unquote, urlparse
 from factory.backlog import JSONBacklog
 from factory.daemon import FactoryDaemon
 from factory.models import FactoryConfig
+from factory.runs import RunRecorder, runs_path_for
 
 logger = logging.getLogger(__name__)
 
 WEB_ROOT = Path(__file__).resolve().parent / "web"
 DEFAULT_LOG_LINES = 100
 MAX_LOG_LINES = 10_000
+DEFAULT_RUN_LIMIT = 10
+MAX_RUN_LIMIT = 10_000
 
 
 class ApiState:
@@ -145,6 +148,16 @@ def make_handler(state: ApiState) -> type[BaseHTTPRequestHandler]:
                     n = max(0, min(n, MAX_LOG_LINES))
                     lines = _tail_lines(Path(state.config.log_file), n)
                     self._send_json(200, {"lines": lines})
+                    return
+                if path == "/api/runs":
+                    raw = query.get("limit", [str(DEFAULT_RUN_LIMIT)])[0]
+                    try:
+                        n = int(raw)
+                    except ValueError:
+                        n = DEFAULT_RUN_LIMIT
+                    n = max(0, min(n, MAX_RUN_LIMIT))
+                    records = RunRecorder(runs_path_for(state.backlog.path)).read(limit=n)
+                    self._send_json(200, [r.model_dump(mode="json") for r in records])
                     return
                 if path == "/api/blocker":
                     blocker = Path(state.config.blocker_file)

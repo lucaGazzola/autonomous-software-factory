@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 from factory.agent import BaseAgent
 from factory.backlog import JSONBacklog
@@ -28,12 +29,25 @@ from factory.models import (
     ExecutionStatus,
     FactoryConfig,
     RepoContext,
+    RunKind,
+    RunOutcome,
+    RunRecord,
     Task,
     TaskStatus,
 )
 from factory.notify import BlockedNotice, send_blocked_notice
+from factory.runs import RunRecorder, runs_path_for
 
 logger = logging.getLogger(__name__)
+
+
+def _execution_outcome(status: ExecutionStatus) -> RunOutcome:
+    """Map an agent execution status onto a run record outcome."""
+    return {
+        ExecutionStatus.SUCCESS: RunOutcome.SUCCESS,
+        ExecutionStatus.BLOCKED: RunOutcome.BLOCKED,
+        ExecutionStatus.ERROR: RunOutcome.ERROR,
+    }[status]
 
 
 @dataclass
@@ -60,16 +74,34 @@ class Factory:
         self.backlog = backlog
         self.agent = agent
         self.git = git
+        self.recorder = RunRecorder(runs_path_for(config.backlog))
+        self._last_task: Task | None = None
+        self._last_agent_result: ExecutionResult | None = None
+        self._last_commit_sha: str | None = None
+        self._blocked_tasks: list[Task] = []
 
     async def run_cycle(self) -> str:
         """Execute one run; returns a short outcome label.
 
         Outcomes: ``blocked``, ``task``, ``paused``, ``refactor``, ``dirty``.
+        Every completed cycle appends exactly one run record.
         """
+        started_at = datetime.now(UTC)
+        outcome = await self._run_cycle()
+        self._record_run(outcome, started_at)
+        return outcome
+
+    async def _run_cycle(self) -> str:
+        """Execute one cycle without recording; returns its outcome label."""
+        self._last_task = None
+        self._last_agent_result = None
+        self._last_commit_sha = None
+        self._blocked_tasks = []
         await self.git.a_ensure_branch(self.config.branch)
         tasks = await self.backlog.list_tasks()
         blocked = [t for t in tasks if t.status is TaskStatus.BLOCKED]
         if blocked:
+            self._blocked_tasks = blocked
             await self._write_blocker(
                 [
                     BlockerEntry(
@@ -105,16 +137,81 @@ class Factory:
         return "refactor"
 
     # ------------------------------------------------------------------ #
+    # Run history                                                         #
+    # ------------------------------------------------------------------ #
+
+    def _record_run(self, outcome: str, started_at: datetime) -> None:
+        """Build and append the run record for a completed cycle."""
+        finished_at = datetime.now(UTC)
+        duration = round((finished_at - started_at).total_seconds(), 3)
+        self.recorder.append(
+            RunRecord(
+                started_at=started_at,
+                finished_at=finished_at,
+                kind=self._run_kind(outcome),
+                task_id=self._run_task_id(outcome),
+                task_title=self._run_task_title(outcome),
+                outcome=self._run_outcome(outcome),
+                agent_exit_code=self._run_exit_code(outcome),
+                commit_sha=self._last_commit_sha if outcome in ("task", "refactor") else None,
+                duration_seconds=duration,
+            )
+        )
+
+    def _run_kind(self, outcome: str) -> RunKind | None:
+        if outcome in ("task", "blocked"):
+            return RunKind.TASK
+        if outcome == "refactor":
+            return RunKind.REFACTOR
+        return None
+
+    def _run_task_id(self, outcome: str) -> str | None:
+        if outcome in ("task", "refactor"):
+            return self._last_task.id if self._last_task is not None else None
+        if outcome == "blocked":
+            return self._blocked_tasks[0].id if self._blocked_tasks else None
+        return None
+
+    def _run_task_title(self, outcome: str) -> str | None:
+        if outcome in ("task", "refactor"):
+            return self._last_task.title if self._last_task is not None else None
+        if outcome == "blocked":
+            return self._blocked_tasks[0].title if self._blocked_tasks else None
+        return None
+
+    def _run_outcome(self, outcome: str) -> RunOutcome:
+        if outcome in ("task", "refactor"):
+            result = self._last_agent_result
+            if result is None:
+                return RunOutcome.ERROR
+            return _execution_outcome(result.status)
+        return {
+            "blocked": RunOutcome.BLOCKED,
+            "paused": RunOutcome.PAUSED,
+            "dirty": RunOutcome.DIRTY,
+            "skipped": RunOutcome.SKIPPED,
+            "error": RunOutcome.ERROR,
+        }.get(outcome, RunOutcome.ERROR)
+
+    def _run_exit_code(self, outcome: str) -> int | None:
+        if outcome not in ("task", "refactor"):
+            return None
+        result = self._last_agent_result
+        return result.exit_code if result is not None else None
+
+    # ------------------------------------------------------------------ #
     # Task execution                                                      #
     # ------------------------------------------------------------------ #
 
     async def _run_task(self, task: Task) -> None:
         """Execute one task: agent run, then commit/push on the main branch."""
         logger.info("Running task %s (%s)", task.id, task.title)
+        self._last_task = task
         result = await self.agent.run_task(
             task,
             RepoContext(repo_path=self.config.repo, branch=self.config.branch),
         )
+        self._last_agent_result = result
 
         if result.status is ExecutionStatus.BLOCKED:
             await self.backlog.update_status(task.id, TaskStatus.BLOCKED)
@@ -217,6 +314,7 @@ class Factory:
         try:
             sha = await self.git.a_commit_all(message)
         except GitError as exc:
+            self._last_commit_sha = None
             await self._fail(
                 task,
                 ExecutionResult(status=ExecutionStatus.ERROR, error=f"git: {exc}"),
@@ -226,6 +324,7 @@ class Factory:
         if sha is None:
             logger.info("No changes produced; nothing committed.")
             return True
+        self._last_commit_sha = sha
         logger.info("Committed %s: %s", sha, message)
         if self.config.remote:
             try:
@@ -247,10 +346,12 @@ class Factory:
             description=self.config.refactor_prompt,
         )
         logger.info("Backlog empty; running refactoring pass.")
+        self._last_task = refactor_task
         result = await self.agent.run_task(
             refactor_task,
             RepoContext(repo_path=self.config.repo, branch=self.config.branch),
         )
+        self._last_agent_result = result
         await self._handle_execution_result(
             result,
             task=refactor_task,

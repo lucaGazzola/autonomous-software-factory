@@ -13,7 +13,8 @@ import pytest
 
 from factory.backlog import JSONBacklog
 from factory.daemon import FactoryDaemon
-from factory.models import TaskStatus
+from factory.models import RunKind, RunOutcome, RunRecord, TaskStatus
+from factory.runs import RunRecorder, runs_path_for
 from factory.server import WEB_ROOT, WebServer
 from tests.conftest import make_config, make_task
 
@@ -204,6 +205,82 @@ def test_api_blocker_null_and_content(running_server, tmp_path):
     status, data = _get(f"http://127.0.0.1:{server.port}/api/blocker")
     assert status == 200
     assert data["content"] == "# Blocked\nDo the thing.\n"
+
+
+def test_api_runs_empty_when_missing(running_server):
+    server, config, _backlog = running_server
+    assert not runs_path_for(config.backlog).exists()
+
+    status, data = _get(f"http://127.0.0.1:{server.port}/api/runs")
+    assert status == 200
+    assert data == []
+
+
+def test_api_runs_newest_first_and_limited(running_server):
+    server, config, _backlog = running_server
+    recorder = RunRecorder(runs_path_for(config.backlog))
+    recorder.append(
+        RunRecord(
+            started_at=datetime(2026, 8, 1, tzinfo=UTC),
+            finished_at=datetime(2026, 8, 1, 0, 0, 10, tzinfo=UTC),
+            kind=RunKind.TASK,
+            task_id="OLD",
+            task_title="Older",
+            outcome=RunOutcome.SUCCESS,
+            agent_exit_code=0,
+            duration_seconds=1.0,
+        )
+    )
+    recorder.append(
+        RunRecord(
+            started_at=datetime(2026, 8, 2, tzinfo=UTC),
+            finished_at=datetime(2026, 8, 2, 0, 0, 10, tzinfo=UTC),
+            kind=RunKind.REFACTOR,
+            outcome=RunOutcome.ERROR,
+            agent_exit_code=3,
+            duration_seconds=2.0,
+        )
+    )
+
+    status, data = _get(f"http://127.0.0.1:{server.port}/api/runs")
+    assert status == 200
+    assert [r["task_id"] for r in data] == [None, "OLD"]
+    assert data[0]["kind"] == "refactor"
+    assert data[0]["outcome"] == "ERROR"
+
+    status, data = _get(f"http://127.0.0.1:{server.port}/api/runs?limit=1")
+    assert status == 200
+    assert [r["task_id"] for r in data] == [None]
+
+    status, data = _get(f"http://127.0.0.1:{server.port}/api/runs?limit=nope")
+    assert status == 200
+    assert len(data) == 2
+
+
+def test_api_runs_skips_corrupt_lines(running_server, caplog):
+    import logging
+
+    server, config, _backlog = running_server
+    recorder = RunRecorder(runs_path_for(config.backlog))
+    recorder.append(
+        RunRecord(
+            started_at=datetime(2026, 8, 1, tzinfo=UTC),
+            finished_at=datetime(2026, 8, 1, 0, 0, 10, tzinfo=UTC),
+            kind=RunKind.TASK,
+            task_id="GOOD",
+            outcome=RunOutcome.SUCCESS,
+            duration_seconds=1.0,
+        )
+    )
+    with recorder.path.open("a", encoding="utf-8") as handle:
+        handle.write("{not json\n")
+
+    with caplog.at_level(logging.WARNING, logger="factory.runs"):
+        status, data = _get(f"http://127.0.0.1:{server.port}/api/runs")
+
+    assert status == 200
+    assert [r["task_id"] for r in data] == ["GOOD"]
+    assert "corrupt" in caplog.text
 
 
 def test_binds_localhost_only(running_server):

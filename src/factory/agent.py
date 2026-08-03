@@ -150,7 +150,11 @@ class ShellAgent(BaseAgent):
 
         if proc.returncode == 0:
             logs.append(f"[{self.name}] Task {task.id} finished successfully (exit 0).")
-            return ExecutionResult(status=ExecutionStatus.SUCCESS, output_logs=logs)
+            return ExecutionResult(
+                status=ExecutionStatus.SUCCESS,
+                output_logs=logs,
+                exit_code=proc.returncode,
+            )
 
         if proc.returncode == self.blocked_exit_code:
             logs.append(f"[{self.name}] Task {task.id} needs human input (exit {proc.returncode}).")
@@ -158,6 +162,7 @@ class ShellAgent(BaseAgent):
                 status=ExecutionStatus.BLOCKED,
                 output_logs=logs,
                 questions=[line for line in logs if line.startswith(("[stdout]", "[stderr]"))],
+                exit_code=proc.returncode,
             )
 
         logs.append(f"[{self.name}] Task {task.id} failed with exit code {proc.returncode}.")
@@ -165,4 +170,5 @@ class ShellAgent(BaseAgent):
             status=ExecutionStatus.ERROR,
             output_logs=logs,
             error=f"exit code {proc.returncode}",
+            exit_code=proc.returncode,
         )

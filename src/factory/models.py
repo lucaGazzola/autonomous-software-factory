@@ -39,6 +39,45 @@ class ExecutionStatus(str, enum.Enum):
     ERROR = "ERROR"
 
 
+class RunKind(str, enum.Enum):
+    """What kind of work a finished cycle performed."""
+
+    TASK = "task"
+    REFACTOR = "refactor"
+
+
+class RunOutcome(str, enum.Enum):
+    """The outcome of a finished cycle.
+
+    ``SUCCESS``, ``BLOCKED`` and ``ERROR`` mirror the agent execution status;
+    the remaining values cover cycles that paused or never ran the agent.
+    """
+
+    SUCCESS = "SUCCESS"
+    BLOCKED = "BLOCKED"
+    ERROR = "ERROR"
+    PAUSED = "PAUSED"
+    DIRTY = "DIRTY"
+    SKIPPED = "SKIPPED"
+
+
+class RunRecord(BaseModel):
+    """A durable, queryable record of one finished factory cycle.
+
+    One JSON object per line in ``runs.jsonl``, next to the backlog.
+    """
+
+    started_at: datetime
+    finished_at: datetime
+    kind: RunKind | None = None
+    task_id: str | None = None
+    task_title: str | None = None
+    outcome: RunOutcome
+    agent_exit_code: int | None = None
+    commit_sha: str | None = None
+    duration_seconds: float
+
+
 class Task(BaseModel):
     """A unit of work the factory executes with the coding agent."""
 
@@ -60,6 +99,7 @@ class ExecutionResult(BaseModel):
     output_logs: list[str] = Field(default_factory=list)
     questions: list[str] = Field(default_factory=list)
     error: str | None = None
+    exit_code: int | None = None
 
 
 class RepoContext(BaseModel):

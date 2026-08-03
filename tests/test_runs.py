@@ -1,0 +1,227 @@
+"""Run history tests: one durable JSON line per finished factory cycle."""
+
+from __future__ import annotations
+
+import json
+import logging
+from datetime import UTC, datetime
+
+from factory.backlog import JSONBacklog
+from factory.factory import Factory
+from factory.git import GitManager
+from factory.models import (
+    ExecutionResult,
+    ExecutionStatus,
+    RunKind,
+    RunOutcome,
+    RunRecord,
+    TaskStatus,
+)
+from factory.runs import RunRecorder, runs_path_for
+from tests.conftest import FakeAgent, git, make_config, make_task
+
+
+def make_factory(git_repo, tmp_path, **overrides) -> tuple[Factory, FakeAgent, JSONBacklog]:
+    config = make_config(git_repo, tmp_path, **overrides)
+    agent = FakeAgent()
+    backlog = JSONBacklog(config.backlog)
+    factory = Factory(config, backlog, agent, GitManager(git_repo))
+    return factory, agent, backlog
+
+
+def read_lines(path) -> list[dict]:
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+
+
+async def test_task_success_appends_run_record(git_repo, tmp_path):
+    factory, agent, backlog = make_factory(git_repo, tmp_path)
+    await backlog.create_task(make_task())
+    agent.result = ExecutionResult(status=ExecutionStatus.SUCCESS, exit_code=0)
+    agent.effect = lambda: (git_repo / "app.py").write_text(
+        "def answer():\n    return 7\n", encoding="utf-8"
+    )
+
+    assert await factory.run_cycle() == "task"
+
+    lines = read_lines(runs_path_for(factory.config.backlog))
+    assert len(lines) == 1
+    record = lines[0]
+    assert record["kind"] == "task"
+    assert record["task_id"] == "TASK-001"
+    assert record["task_title"] == "Do the thing"
+    assert record["outcome"] == "SUCCESS"
+    assert record["agent_exit_code"] == 0
+    assert record["commit_sha"] == git(git_repo, "rev-parse", "--short", "HEAD")
+    assert record["duration_seconds"] >= 0
+    assert record["started_at"]
+    assert record["finished_at"]
+
+
+async def test_task_success_without_changes_has_no_commit_sha(git_repo, tmp_path):
+    factory, agent, backlog = make_factory(git_repo, tmp_path)
+    await backlog.create_task(make_task())
+    agent.result = ExecutionResult(status=ExecutionStatus.SUCCESS, exit_code=0)
+
+    assert await factory.run_cycle() == "task"
+
+    record = read_lines(runs_path_for(factory.config.backlog))[0]
+    assert record["outcome"] == "SUCCESS"
+    assert record["commit_sha"] is None
+
+
+async def test_task_blocked_record(git_repo, tmp_path):
+    factory, agent, backlog = make_factory(git_repo, tmp_path)
+    await backlog.create_task(make_task())
+    agent.result = ExecutionResult(status=ExecutionStatus.BLOCKED, questions=["?"], exit_code=2)
+    agent.effect = lambda: (git_repo / "wip.txt").write_text("partial\n", encoding="utf-8")
+
+    assert await factory.run_cycle() == "task"
+
+    record = read_lines(runs_path_for(factory.config.backlog))[0]
+    assert record["kind"] == "task"
+    assert record["outcome"] == "BLOCKED"
+    assert record["agent_exit_code"] == 2
+    assert record["commit_sha"] == git(git_repo, "rev-parse", "--short", "HEAD")
+
+
+async def test_task_error_record(git_repo, tmp_path):
+    factory, agent, backlog = make_factory(git_repo, tmp_path)
+    await backlog.create_task(make_task())
+    agent.result = ExecutionResult(status=ExecutionStatus.ERROR, error="boom", exit_code=3)
+    agent.effect = lambda: (git_repo / "app.py").write_text("garbage\n", encoding="utf-8")
+
+    assert await factory.run_cycle() == "task"
+
+    record = read_lines(runs_path_for(factory.config.backlog))[0]
+    assert record["kind"] == "task"
+    assert record["task_id"] == "TASK-001"
+    assert record["outcome"] == "ERROR"
+    assert record["agent_exit_code"] == 3
+    assert record["commit_sha"] is None
+
+
+async def test_refactor_record(git_repo, tmp_path):
+    factory, agent, _backlog = make_factory(git_repo, tmp_path)
+    agent.result = ExecutionResult(status=ExecutionStatus.SUCCESS, exit_code=0)
+
+    assert await factory.run_cycle() == "refactor"
+
+    record = read_lines(runs_path_for(factory.config.backlog))[0]
+    assert record["kind"] == "refactor"
+    assert record["task_id"] == "REFACTOR"
+    assert record["task_title"] == "Refactoring pass"
+    assert record["outcome"] == "SUCCESS"
+    assert record["agent_exit_code"] == 0
+
+
+async def test_every_cycle_appends_exactly_one_line(git_repo, tmp_path):
+    factory, agent, backlog = make_factory(git_repo, tmp_path)
+    await backlog.create_task(make_task())
+    runs = runs_path_for(factory.config.backlog)
+
+    agent.result = ExecutionResult(status=ExecutionStatus.SUCCESS, exit_code=0)
+    assert await factory.run_cycle() == "task"
+    assert len(read_lines(runs)) == 1
+
+    await backlog.update_status("TASK-001", TaskStatus.OPEN)
+    agent.result = ExecutionResult(status=ExecutionStatus.ERROR, error="boom", exit_code=3)
+    assert await factory.run_cycle() == "task"
+    assert len(read_lines(runs)) == 2
+
+    await backlog.update_status("TASK-001", TaskStatus.OPEN)
+    agent.result = ExecutionResult(status=ExecutionStatus.BLOCKED, questions=["?"], exit_code=2)
+    assert await factory.run_cycle() == "task"
+    assert len(read_lines(runs)) == 3
+
+    assert await factory.run_cycle() == "blocked"
+    assert len(read_lines(runs)) == 4
+
+    await backlog.update_status("TASK-001", TaskStatus.COMPLETED)
+    factory.config.blocker_file.write_text("stale", encoding="utf-8")
+    assert await factory.run_cycle() == "paused"
+    assert len(read_lines(runs)) == 5
+
+    factory.config.blocker_file.unlink()
+    await backlog.update_status("TASK-001", TaskStatus.OPEN)
+    (git_repo / "manual.txt").write_text("wip\n", encoding="utf-8")
+    assert await factory.run_cycle() == "dirty"
+    assert len(read_lines(runs)) == 6
+
+    await backlog.update_status("TASK-001", TaskStatus.COMPLETED)
+    git(git_repo, "clean", "-fd")
+    agent.result = ExecutionResult(status=ExecutionStatus.SUCCESS, exit_code=0)
+    assert await factory.run_cycle() == "refactor"
+    assert len(read_lines(runs)) == 7
+
+
+def test_read_missing_file_returns_empty(tmp_path):
+    recorder = RunRecorder(tmp_path / "runs.jsonl")
+    assert recorder.read() == []
+    assert recorder.read_last() is None
+
+
+def test_read_returns_newest_first(tmp_path):
+    recorder = RunRecorder(tmp_path / "runs.jsonl")
+    older = RunRecord(
+        started_at=datetime(2026, 8, 1, tzinfo=UTC),
+        finished_at=datetime(2026, 8, 1, 0, 0, 10, tzinfo=UTC),
+        kind=RunKind.TASK,
+        task_id="OLD",
+        outcome=RunOutcome.SUCCESS,
+        duration_seconds=1.0,
+    )
+    newer = RunRecord(
+        started_at=datetime(2026, 8, 2, tzinfo=UTC),
+        finished_at=datetime(2026, 8, 2, 0, 0, 10, tzinfo=UTC),
+        kind=RunKind.REFACTOR,
+        outcome=RunOutcome.ERROR,
+        duration_seconds=2.0,
+    )
+    recorder.append(older)
+    recorder.append(newer)
+
+    assert [r.task_id for r in recorder.read()] == [None, "OLD"]
+    assert [r.kind for r in recorder.read()] == [RunKind.REFACTOR, RunKind.TASK]
+    assert [r.task_id for r in recorder.read(limit=1)] == [None]
+    assert recorder.read_last().task_id is None
+    assert recorder.read_last().kind is RunKind.REFACTOR
+
+
+def test_read_skips_corrupt_lines_with_warning(tmp_path, caplog):
+    recorder = RunRecorder(tmp_path / "runs.jsonl")
+    recorder.append(
+        RunRecord(
+            started_at=datetime(2026, 8, 1, tzinfo=UTC),
+            finished_at=datetime(2026, 8, 1, 0, 0, 10, tzinfo=UTC),
+            kind=RunKind.TASK,
+            task_id="GOOD",
+            outcome=RunOutcome.SUCCESS,
+            duration_seconds=1.0,
+        )
+    )
+    with recorder.path.open("a", encoding="utf-8") as handle:
+        handle.write("{not json\n")
+        handle.write('{"started_at": "broken"\n')
+
+    with caplog.at_level(logging.WARNING, logger="factory.runs"):
+        records = recorder.read()
+
+    assert "corrupt" in caplog.text
+    assert len(records) == 1
+    assert records[0].task_id == "GOOD"
+
+
+async def test_corrupt_runs_never_break_a_cycle(git_repo, tmp_path, caplog):
+    factory, agent, backlog = make_factory(git_repo, tmp_path)
+    runs = runs_path_for(factory.config.backlog)
+    runs.write_text("{not json\n", encoding="utf-8")
+    await backlog.create_task(make_task())
+    agent.result = ExecutionResult(status=ExecutionStatus.SUCCESS, exit_code=0)
+
+    with caplog.at_level(logging.WARNING, logger="factory.runs"):
+        assert await factory.run_cycle() == "task"
+
+    records = RunRecorder(runs).read()
+    assert len(records) == 1
+    assert records[0].outcome is RunOutcome.SUCCESS
+    assert records[0].task_id == "TASK-001"
