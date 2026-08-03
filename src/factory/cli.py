@@ -43,13 +43,13 @@ from rich.panel import Panel
 from rich.prompt import Confirm
 
 from factory import __version__
-from factory.agent import ShellAgent
+from factory.agent import DockerSandboxAgent, SandboxUnavailableError, ShellAgent
 from factory.backlog import JSONBacklog
 from factory.config import load_config
 from factory.daemon import FactoryDaemon, acquire_run_lock, is_lock_held, read_lock_pid
 from factory.factory import Factory
 from factory.git import GitManager
-from factory.models import FactoryConfig, Task, TaskStatus
+from factory.models import FactoryConfig, SandboxMode, Task, TaskStatus
 from factory.runs import RunRecorder, runs_path_for
 from factory.server import WebServer
 from factory.setup import run_setup
@@ -217,15 +217,36 @@ def _acquire_run_lock(config: FactoryConfig) -> Any | None:
     return lock
 
 
-def _make_factory(config: FactoryConfig) -> Factory:
-    """Build a :class:`Factory` wired to the config."""
-    backlog = JSONBacklog(config.backlog)
-    agent = ShellAgent(
+def _build_agent(config: FactoryConfig) -> ShellAgent:
+    """Build the configured agent, sandboxed when ``agent_sandbox`` demands it."""
+    if config.agent_sandbox is SandboxMode.DOCKER:
+        return DockerSandboxAgent(
+            config.agent_command,
+            image=config.agent_sandbox_image or "",
+            network=config.agent_sandbox_network,
+            mounts=config.agent_sandbox_mounts,
+            timeout_seconds=config.agent_timeout_seconds,
+            env=config.agent_env,
+            blocked_exit_code=config.blocked_exit_code,
+        )
+    return ShellAgent(
         config.agent_command,
         timeout_seconds=config.agent_timeout_seconds,
         env=config.agent_env,
         blocked_exit_code=config.blocked_exit_code,
     )
+
+
+def _make_factory(config: FactoryConfig) -> Factory:
+    """Build a :class:`Factory` wired to the config.
+
+    Raises:
+        SandboxUnavailableError: When the configured sandbox backend is
+            unavailable (e.g. no docker binary) — callers turn that into a
+            clear startup error.
+    """
+    backlog = JSONBacklog(config.backlog)
+    agent = _build_agent(config)
     return Factory(
         config,
         backlog,
@@ -248,8 +269,14 @@ def cmd_start(args: argparse.Namespace) -> int:
     if lock is None:
         return 1
 
-    async def _serve() -> None:
+    try:
         factory = _make_factory(config)
+    except SandboxUnavailableError as exc:
+        console.print(f"[red]{exc}[/red]")
+        log.error("Sandbox unavailable: %s", exc)
+        return 1
+
+    async def _serve() -> None:
         daemon = FactoryDaemon(config, factory)
         loop = asyncio.get_running_loop()
         web = WebServer(config, factory.backlog, daemon)
@@ -306,8 +333,15 @@ def cmd_once(args: argparse.Namespace) -> int:
     if lock is None:
         return 1
 
+    try:
+        factory = _make_factory(config)
+    except SandboxUnavailableError as exc:
+        console.print(f"[red]{exc}[/red]")
+        log.error("Sandbox unavailable: %s", exc)
+        return 1
+
     async def _run_once() -> None:
-        outcome = await _make_factory(config).run_cycle()
+        outcome = await factory.run_cycle()
         log.info("Run finished: %s", outcome)
         console.print(f"[green]Cycle finished: {outcome}[/green]")
 

@@ -6,7 +6,7 @@ import pytest
 from pydantic import ValidationError
 
 from factory.config import load_config
-from factory.models import DEFAULT_REFACTOR_PROMPT, FactoryConfig, Task, TaskStatus
+from factory.models import DEFAULT_REFACTOR_PROMPT, FactoryConfig, SandboxMode, Task, TaskStatus
 
 
 def test_task_defaults_to_open():
@@ -65,6 +65,36 @@ def test_config_defaults():
     assert config.web_port == 8787
     assert config.telegram_bot_token is None
     assert config.telegram_chat_id is None
+
+
+def test_config_sandbox_defaults_to_none():
+    config = FactoryConfig(agent_command="x")
+    assert config.agent_sandbox is SandboxMode.NONE
+    assert config.agent_sandbox_image is None
+    assert config.agent_sandbox_network == "none"
+    assert config.agent_sandbox_mounts == []
+
+
+def test_config_docker_sandbox_requires_image():
+    with pytest.raises(ValidationError):
+        FactoryConfig(agent_command="x", agent_sandbox="docker")
+
+
+def test_config_docker_sandbox_accepts_image():
+    config = FactoryConfig(
+        agent_command="x",
+        agent_sandbox="docker",
+        agent_sandbox_image="forgeo-agent",
+    )
+    assert config.agent_sandbox is SandboxMode.DOCKER
+    assert config.agent_sandbox_image == "forgeo-agent"
+
+
+def test_config_rejects_blank_network_and_mounts():
+    with pytest.raises(ValidationError):
+        FactoryConfig(agent_command="x", agent_sandbox_network="")
+    with pytest.raises(ValidationError):
+        FactoryConfig(agent_command="x", agent_sandbox_mounts=["", "  "])
 
 
 def test_config_rejects_zero_interval():

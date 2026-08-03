@@ -11,7 +11,7 @@ import enum
 from datetime import UTC, datetime
 from pathlib import Path
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 DEFAULT_REFACTOR_PROMPT = (
     "Review the codebase for improvement opportunities that do not change "
@@ -48,6 +48,18 @@ class ExecutionStatus(str, enum.Enum):
     SUCCESS = "SUCCESS"
     BLOCKED = "BLOCKED"
     ERROR = "ERROR"
+
+
+class SandboxMode(str, enum.Enum):
+    """How the agent process is isolated from the host machine.
+
+    ``NONE`` runs the agent directly on the host with the user's full
+    privileges (the default, unchanged behavior); ``DOCKER`` runs the agent
+    inside a ``docker run --rm`` container.
+    """
+
+    NONE = "none"
+    DOCKER = "docker"
 
 
 class RunKind(str, enum.Enum):
@@ -146,6 +158,18 @@ class FactoryConfig(BaseModel):
             (``None`` = never; a run that overruns the interval simply makes
             the next iteration skip).
         agent_env: Extra environment variables for the agent process.
+        agent_sandbox: Isolation mode for the agent process: ``none`` (the
+            default, runs directly on the host) or ``docker`` (runs inside a
+            container). See the README for the docker image expectations.
+        agent_sandbox_image: Container image used when ``agent_sandbox`` is
+            ``docker``. Required in that mode; it must contain the agent CLI
+            and a POSIX shell.
+        agent_sandbox_network: Docker network for the sandboxed agent
+            (``--network``). Default ``none`` (networking disabled); set to
+            e.g. ``bridge`` or ``host`` to re-enable it.
+        agent_sandbox_mounts: Host paths mounted read-only into the sandboxed
+            container at the same absolute path (agent credentials/config).
+            Nothing is mounted unless listed here.
         blocked_exit_code: Exit code the agent uses to signal that it needs
             human input.
         remote: Git remote to push to (e.g. ``origin``). When omitted the
@@ -172,6 +196,10 @@ class FactoryConfig(BaseModel):
     agent_command: str | list[str]
     agent_timeout_seconds: float | None = Field(default=None, gt=0)
     agent_env: dict[str, str] = Field(default_factory=dict)
+    agent_sandbox: SandboxMode = SandboxMode.NONE
+    agent_sandbox_image: str | None = None
+    agent_sandbox_network: str = "none"
+    agent_sandbox_mounts: list[str] = Field(default_factory=list)
     blocked_exit_code: int = Field(default=2)
     remote: str | None = None
     branch: str = "main"
@@ -186,6 +214,27 @@ class FactoryConfig(BaseModel):
     @classmethod
     def _command_not_blank(cls, value: str | list[str]) -> str | list[str] | None:
         return _validate_agent_command(value)
+
+    @field_validator("agent_sandbox_network")
+    @classmethod
+    def _network_not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("agent_sandbox_network must not be blank")
+        return value
+
+    @field_validator("agent_sandbox_mounts")
+    @classmethod
+    def _mounts_not_blank(cls, value: list[str]) -> list[str]:
+        for mount in value:
+            if not mount.strip():
+                raise ValueError("agent_sandbox_mounts must not contain blank paths")
+        return value
+
+    @model_validator(mode="after")
+    def _docker_requires_image(self) -> FactoryConfig:
+        if self.agent_sandbox is SandboxMode.DOCKER and not (self.agent_sandbox_image or "").strip():
+            raise ValueError("agent_sandbox_image is required when agent_sandbox is 'docker'")
+        return self
 
     @property
     def blocked_command(self) -> str:

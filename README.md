@@ -175,6 +175,10 @@ repository.
 | `agent_command` | The coding agent: any shell command (string or argv list). |
 | `agent_timeout_seconds` | Optional: kill the agent after this many seconds. |
 | `agent_env` | Extra environment variables for the agent process. |
+| `agent_sandbox` | Agent isolation mode: `none` (default, runs on the host) or `docker`. |
+| `agent_sandbox_image` | Container image (required with `docker`); must contain the agent CLI and a shell. |
+| `agent_sandbox_network` | Docker `--network` for the sandboxed agent (default `none`, i.e. networking disabled). |
+| `agent_sandbox_mounts` | Host paths mounted read-only into the sandboxed container (agent credentials/config). |
 | `blocked_exit_code` | Exit code meaning "needs human input" (default `2`). |
 | `refactor_prompt` | Instruction used when the backlog is empty. |
 | `log_file` | Where the daemon writes its log (default `factory.log`). |
@@ -207,6 +211,39 @@ The exit code decides the outcome:
 
 Only one agent runs at a time; an iteration that wakes up while the agent is
 still working is skipped, never killed.
+
+## Running the agent in a Docker sandbox (opt-in)
+
+By default the agent runs directly on the host with your full privileges. To
+contain a misbehaving agent, set `agent_sandbox: docker` in `factory.yaml`:
+
+```yaml
+agent_sandbox: docker
+agent_sandbox_image: forgeo-agent
+```
+
+The factory then runs `docker run --rm` instead of executing the command on
+the host:
+
+- the repository is bind-mounted into the container at the same absolute
+  path, so the agent's edits land on your checkout as usual;
+- `FACTORY_TASK` (and the other `FACTORY_*` variables) plus `agent_env` are
+  passed through as container environment variables;
+- networking is disabled (`--network none`) by default. Set
+  `agent_sandbox_network` (e.g. `bridge`, `host`) to re-enable it;
+- nothing of yours is visible inside the container unless you list it in
+  `agent_sandbox_mounts`, which mounts host paths (agent credentials/config
+  such as `~/.claude`) read-only at the same path.
+
+**Image expectations:** `agent_sandbox_image` must be an image that already
+contains the agent CLI your `agent_command` uses (e.g. `claude`, `opencode`)
+and a POSIX shell (`sh`) for string commands. No packages are installed at run
+time. The exit-code contract is unchanged: `0`, `blocked_exit_code`, or any
+other code map exactly as they do on the host.
+
+Requires a working `docker` binary on the factory host. If it is missing,
+`factory start` / `factory once` fail fast with a clear error (and a cycle that
+somehow reaches docker without it is reported as a task error).
 
 ## Develop
 

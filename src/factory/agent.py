@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import shutil
 from abc import ABC, abstractmethod
 from collections import deque
 
@@ -25,6 +26,10 @@ from factory.models import ExecutionResult, ExecutionStatus, RepoContext, Task
 # Keep only the most recent process output lines so a chatty agent cannot
 # blow memory; header/footer status lines are added around this window.
 _MAX_OUTPUT_LINES = 1000
+
+
+class SandboxUnavailableError(RuntimeError):
+    """The configured sandbox backend cannot run on this host."""
 
 
 class BaseAgent(ABC):
@@ -96,6 +101,33 @@ class ShellAgent(BaseAgent):
             text = raw.decode(errors="replace").rstrip("\r\n")
             lines.append(f"[{prefix}] {text}")
 
+    async def _spawn(
+        self,
+        command: str | list[str],
+        cwd: str,
+        env: dict[str, str],
+    ) -> asyncio.subprocess.Process:
+        """Start the agent process; returns a handle to it.
+
+        Subclasses (e.g. sandboxes) override this to change *how* the command
+        runs; the exit-code contract and output handling stay in ``run_task``.
+        """
+        if isinstance(command, str):
+            return await asyncio.create_subprocess_shell(
+                command,
+                cwd=cwd,
+                env=env,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+        return await asyncio.create_subprocess_exec(
+            *command,
+            cwd=cwd,
+            env=env,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+
     async def run_task(
         self,
         task: Task,
@@ -122,22 +154,7 @@ class ShellAgent(BaseAgent):
         }
 
         try:
-            if isinstance(command, str):
-                proc = await asyncio.create_subprocess_shell(
-                    command,
-                    cwd=str(context.repo_path),
-                    env=env,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
-                )
-            else:
-                proc = await asyncio.create_subprocess_exec(
-                    *command,
-                    cwd=str(context.repo_path),
-                    env=env,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
-                )
+            proc = await self._spawn(command, str(context.repo_path), env)
         except FileNotFoundError as exc:
             logs.append(f"[{self.name}] Command not found: {exc}")
             return ExecutionResult(
@@ -196,4 +213,91 @@ class ShellAgent(BaseAgent):
             output_logs=logs,
             error=f"exit code {proc.returncode}",
             exit_code=proc.returncode,
+        )
+
+
+# Environment variables set by ``run_task`` and forwarded into the container.
+_SANDBOX_FORWARDED_ENV = ("FACTORY_TASK", "FACTORY_REPO", "FACTORY_BRANCH")
+
+
+class DockerSandboxAgent(ShellAgent):
+    """Runs the agent command inside a ``docker run --rm`` container.
+
+    The repository is bind-mounted at its absolute path (so the agent's edits
+    land on the host checkout), ``FACTORY_TASK`` and ``agent_env`` are passed
+    through as environment variables, and networking is disabled
+    (``--network none``) unless a network is configured explicitly. Agent
+    credentials/config are only visible inside the container when listed in
+    ``mounts`` (mounted read-only at the same path). The container exit code
+    is mapped exactly like the shell agent's: ``0`` success,
+    ``blocked_exit_code`` needs human input, anything else is an error.
+
+    The image is expected to contain the agent CLI (e.g. ``claude``) and a
+    POSIX shell (``sh``) for string commands.
+    """
+
+    name = "docker"
+
+    def __init__(
+        self,
+        command: str | list[str],
+        *,
+        image: str,
+        network: str = "none",
+        mounts: list[str] | None = None,
+        timeout_seconds: float | None = None,
+        env: dict[str, str] | None = None,
+        blocked_exit_code: int = 2,
+    ) -> None:
+        if not (image or "").strip():
+            raise ValueError("docker sandbox requires an image")
+        if shutil.which("docker") is None:
+            raise SandboxUnavailableError(
+                "agent_sandbox: docker is configured but the `docker` binary was "
+                "not found on PATH."
+            )
+        super().__init__(
+            command,
+            timeout_seconds=timeout_seconds,
+            env=env,
+            blocked_exit_code=blocked_exit_code,
+        )
+        self.image = image
+        self.network = network
+        self.mounts = [mount for mount in (mounts or []) if mount]
+
+    def _docker_args(
+        self,
+        command: str | list[str],
+        cwd: str,
+        env: dict[str, str],
+    ) -> list[str]:
+        """Build the ``docker run`` argv for one agent execution."""
+        args = ["docker", "run", "--rm", "--network", self.network, "-w", cwd]
+        args += ["-v", f"{cwd}:{cwd}"]
+        forwarded = set(_SANDBOX_FORWARDED_ENV) | set(self.env)
+        for key in sorted(forwarded):
+            if key in env:
+                args += ["-e", f"{key}={env[key]}"]
+        for mount in self.mounts:
+            args += ["-v", f"{mount}:{mount}:ro"]
+        args.append(self.image)
+        if isinstance(command, str):
+            args += ["sh", "-c", command]
+        else:
+            args += list(command)
+        return args
+
+    async def _spawn(
+        self,
+        command: str | list[str],
+        cwd: str,
+        env: dict[str, str],
+    ) -> asyncio.subprocess.Process:
+        return await asyncio.create_subprocess_exec(
+            *self._docker_args(command, cwd, env),
+            cwd=cwd,
+            env=env,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
         )

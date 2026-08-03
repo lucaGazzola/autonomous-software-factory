@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from factory.agent import ShellAgent
+import pytest
+
+from factory.agent import DockerSandboxAgent, SandboxUnavailableError, ShellAgent
 from factory.models import ExecutionStatus, RepoContext
 from tests.conftest import make_task
 
@@ -131,3 +133,165 @@ async def test_per_task_argv_list_override():
         command=["sh", "-c", "exit 2"],
     )
     assert result.status is ExecutionStatus.BLOCKED
+
+
+class _FakeStream:
+    """Stand-in for asyncio.StreamReader that serves a fixed chunk."""
+
+    def __init__(self, data: bytes) -> None:
+        self._lines = iter(data.splitlines(keepends=True))
+
+    async def readline(self) -> bytes:
+        try:
+            return next(self._lines)
+        except StopIteration:
+            return b""
+
+
+class _FakeProcess:
+    """Stand-in for an asyncio subprocess: fixed exit code, no real I/O."""
+
+    def __init__(self, returncode: int = 0, stdout: bytes = b"", stderr: bytes = b"") -> None:
+        self.returncode = returncode
+        self.stdout = _FakeStream(stdout)
+        self.stderr = _FakeStream(stderr)
+
+    async def wait(self) -> int:
+        return self.returncode
+
+    def kill(self) -> None:
+        pass
+
+
+def fake_docker_exec(captured: dict, returncode: int = 0) -> object:
+    """A ``create_subprocess_exec`` fake recording the docker argv."""
+
+    async def _run(*args, **kwargs):
+        captured["args"] = list(args)
+        captured["cwd"] = kwargs.get("cwd")
+        captured["env"] = kwargs.get("env")
+        return _FakeProcess(returncode=returncode, stdout=b"docker output\n")
+
+    return _run
+
+
+def docker_agent(**overrides) -> DockerSandboxAgent:
+    defaults = {"command": "opencode run", "image": "forgeo-agent:latest"}
+    defaults.update(overrides)
+    return DockerSandboxAgent(**defaults)
+
+
+async def test_docker_missing_binary_raises(monkeypatch):
+    monkeypatch.setattr("factory.agent.shutil.which", lambda _cmd: None)
+    with pytest.raises(SandboxUnavailableError):
+        docker_agent()
+
+
+def test_docker_rejects_blank_image():
+    with pytest.raises(ValueError):
+        DockerSandboxAgent("true", image="  ")
+
+
+async def test_docker_runs_in_container_with_repo_mounted(monkeypatch, tmp_path):
+    captured: dict = {}
+    monkeypatch.setattr("factory.agent.asyncio.create_subprocess_exec", fake_docker_exec(captured))
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    agent = docker_agent()
+    result = await agent.run_task(TASK, RepoContext(repo_path=repo, branch="main"))
+
+    assert result.status is ExecutionStatus.SUCCESS
+    args = captured["args"]
+    assert args[0] == "docker"
+    assert "--rm" in args
+    assert "-w" in args
+    assert args[args.index("-w") + 1] == str(repo)
+    assert "-v" in args
+    assert f"{repo}:{repo}" in args
+    assert "--network" in args
+    assert args[args.index("--network") + 1] == "none"
+    assert "forgeo-agent:latest" in args
+    assert args[args.index("-c") + 1] == "opencode run"
+    assert captured["cwd"] == str(repo)
+
+
+async def test_docker_forwards_task_env(monkeypatch, tmp_path):
+    captured: dict = {}
+    monkeypatch.setattr("factory.agent.asyncio.create_subprocess_exec", fake_docker_exec(captured))
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    await docker_agent().run_task(TASK, RepoContext(repo_path=repo, branch="feature"))
+
+    args = captured["args"]
+    assert "-e" in args
+    task_env = next(a for a in args if a.startswith("FACTORY_TASK="))
+    assert "Add retries" in task_env
+    assert "Implement retry logic." in task_env
+    assert next(a for a in args if a.startswith("FACTORY_REPO=")) == f"FACTORY_REPO={repo}"
+    assert "FACTORY_BRANCH=feature" in args
+
+
+async def test_docker_forwards_agent_env(monkeypatch):
+    captured: dict = {}
+    monkeypatch.setattr("factory.agent.asyncio.create_subprocess_exec", fake_docker_exec(captured))
+    agent = docker_agent(env={"MY_TOKEN": "secret", "MODEL": "claude"})
+    await agent.run_task(TASK, RepoContext())
+
+    args = captured["args"]
+    assert "MY_TOKEN=secret" in args
+    assert "MODEL=claude" in args
+
+
+async def test_docker_network_configurable(monkeypatch):
+    captured: dict = {}
+    monkeypatch.setattr("factory.agent.asyncio.create_subprocess_exec", fake_docker_exec(captured))
+    agent = docker_agent(network="bridge")
+    await agent.run_task(TASK, RepoContext())
+
+    args = captured["args"]
+    assert args[args.index("--network") + 1] == "bridge"
+
+
+async def test_docker_mounts_are_read_only(monkeypatch, tmp_path):
+    captured: dict = {}
+    monkeypatch.setattr("factory.agent.asyncio.create_subprocess_exec", fake_docker_exec(captured))
+    creds = tmp_path / "creds"
+    creds.mkdir()
+    agent = docker_agent(mounts=[str(creds)])
+    await agent.run_task(TASK, RepoContext())
+
+    args = captured["args"]
+    assert f"{creds}:{creds}:ro" in args
+
+
+async def test_docker_preserves_blocked_exit_code(monkeypatch):
+    captured: dict = {}
+    monkeypatch.setattr(
+        "factory.agent.asyncio.create_subprocess_exec",
+        fake_docker_exec(captured, returncode=2),
+    )
+    result = await docker_agent().run_task(TASK, RepoContext())
+    assert result.status is ExecutionStatus.BLOCKED
+    assert result.exit_code == 2
+
+
+async def test_docker_preserves_other_exit_code_as_error(monkeypatch):
+    captured: dict = {}
+    monkeypatch.setattr(
+        "factory.agent.asyncio.create_subprocess_exec",
+        fake_docker_exec(captured, returncode=1),
+    )
+    result = await docker_agent().run_task(TASK, RepoContext())
+    assert result.status is ExecutionStatus.ERROR
+    assert "exit code 1" in (result.error or "")
+
+
+async def test_docker_accepts_argv_list_command(monkeypatch):
+    captured: dict = {}
+    monkeypatch.setattr("factory.agent.asyncio.create_subprocess_exec", fake_docker_exec(captured))
+    agent = docker_agent(command=["opencode", "run"])
+    await agent.run_task(TASK, RepoContext())
+
+    args = captured["args"]
+    assert args[-2:] == ["opencode", "run"]
+    assert "sh" not in args
