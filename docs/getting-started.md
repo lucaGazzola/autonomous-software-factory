@@ -12,7 +12,7 @@ remote with the one-liner:
 curl -fsSL https://raw.githubusercontent.com/lucaGazzola/forgeo/main/install.sh | bash
 ```
 
-The installer (SELF-013):
+The installer:
 
 - prefers `pipx` and falls back to `pip install --user`;
 - never needs root;

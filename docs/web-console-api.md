@@ -9,9 +9,9 @@ binds **`127.0.0.1` only** — it is not reachable from other machines.
 - Everything is read-only: the API never modifies the backlog, the repository,
   or the daemon.
 
-The API (SELF-010) is served by `factory.server` using the standard library;
-any static files placed in `src/factory/web/` are served at `/` so the same
-server can host a small dashboard (SELF-011).
+The API is served by `factory.server` using the standard library; any static
+files placed in `src/factory/web/` are served at `/` so the same server can
+host a small dashboard.
 
 ## Endpoints
 

@@ -45,4 +45,3 @@ nav:
   - Agent contract: agent-contract.md
   - CLI reference: cli-reference.md
   - Web console & HTTP API: web-console-api.md
-  - Running the factory on itself: running-on-itself.md

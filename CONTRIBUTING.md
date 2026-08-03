@@ -1,9 +1,6 @@
 # Contributing to Forgeo
 
-Thanks for contributing! This project is an agent-driven software factory, and
-it dogfoods itself: the repository's own backlog is executed by the factory on
-`main`. Before your first contribution, read [docs/running-on-itself.md](docs/running-on-itself.md)
-to understand how the project runs on itself.
+Thanks for contributing! This project is an agent-driven software factory.
 
 ## Development setup
 
@@ -32,12 +29,11 @@ clean.
 
 ## Writing a backlog task
 
-Backlog tasks are how the self-factory receives work. Tasks are JSON objects
-in `.factory/backlog.json` (see [docs/backlog.md](docs/backlog.md) for the full
+Backlog tasks are how the factory receives work. Tasks are JSON objects
+in the backlog file (see [docs/backlog.md](docs/backlog.md) for the full
 schema). A good task has three things:
 
-- **`id`** — a unique identifier, e.g. `TASK-001` (the self-factory uses
-  `SELF-001`, `SELF-002`, …). Duplicate ids are rejected.
+- **`id`** — a unique identifier, e.g. `TASK-001`. Duplicate ids are rejected.
 - **`description`** — a self-contained specification handed to the agent. State
   the current behavior, the desired behavior, and where the change lives. The
   agent does not have your mental context, so spell it out.
@@ -50,7 +46,7 @@ Example:
 
 ```json
 {
-  "id": "SELF-002",
+  "id": "TASK-002",
   "title": "Add `factory once` command to run a single cycle",
   "description": "The CLI only offers `factory start` (the persistent daemon). Add a `once` subcommand that runs exactly one cycle and exits.",
   "acceptance_criteria": [
@@ -64,12 +60,11 @@ Example:
 ```
 
 Keep the description scoped to one task, keep acceptance criteria minimal and
-testable, and never commit `.factory/backlog.json` — it is gitignored.
+testable, and never commit the backlog file — it is gitignored.
 
 ## Pull-request process
 
-Forgeo's own agent commits directly to `main`, but human contributions use the
-normal GitHub flow:
+Human contributions use the normal GitHub flow:
 
 1. Create a feature branch off `main`: `git checkout -b feat/my-change`.
 2. Make your change and commit it with a concise, descriptive message.

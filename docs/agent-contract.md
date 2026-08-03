@@ -88,9 +88,17 @@ that, based on the exit code. The working contract is:
   written;
 - exit anything else to have your changes discarded.
 
-This is why the dogfooded `agent_command` in this repository explicitly
-instructs the agent: *"Do NOT run git commit, git push, or git add -A — the
-factory commits your work itself."*
+A good way to keep this contract front and center is to embed it in the
+`agent_command` prompt itself, e.g.:
+
+```yaml
+agent_command: >
+  opencode run --auto "Work on the repository at the current working directory.
+  Make the code changes requested below and nothing else. Do NOT run
+  git commit, git push, or git add -A — the factory commits your work.
+  Verify with the test suite where applicable.
+  $FACTORY_TASK"
+```
 
 ## Concurrency
 

@@ -118,6 +118,12 @@ application you want to build.
 
 ## Config (`factory.yaml`)
 
+The factory reads `factory.yaml` from the current directory. A commented
+example config lives in [`config/factory.yaml`](config/factory.yaml) — copy it
+to your factory directory and adjust. `factory init` writes one for you
+interactively. The file is machine-specific, so it is not committed to this
+repository.
+
 | Key | Meaning |
 | --- | --- |
 | `name` | Display name (logs, commit messages). |
