@@ -282,3 +282,44 @@ async def test_task_instruction_reaches_agent(git_repo, tmp_path):
     await factory.run_cycle()
     called_task, _ = agent.calls[0]
     assert called_task.id == "TASK-001"
+
+
+async def test_task_agent_command_override_reaches_agent(git_repo, tmp_path):
+    factory, agent, backlog = make_factory(git_repo, tmp_path)
+    await backlog.create_task(
+        make_task(agent_command="claude -p \"$FACTORY_TASK\" --model cheap")
+    )
+    agent.result = ExecutionResult(status=ExecutionStatus.SUCCESS)
+
+    await factory.run_cycle()
+
+    assert agent.overrides == [("claude -p \"$FACTORY_TASK\" --model cheap", None)]
+
+
+async def test_task_agent_timeout_override_reaches_agent(git_repo, tmp_path):
+    factory, agent, backlog = make_factory(git_repo, tmp_path)
+    await backlog.create_task(make_task(agent_command="echo hi", agent_timeout_seconds=45))
+    agent.result = ExecutionResult(status=ExecutionStatus.SUCCESS)
+
+    await factory.run_cycle()
+
+    assert agent.overrides == [("echo hi", 45)]
+
+
+async def test_task_without_override_falls_back_to_global(git_repo, tmp_path):
+    factory, agent, backlog = make_factory(git_repo, tmp_path, agent_command="echo global")
+    await backlog.create_task(make_task())
+    agent.result = ExecutionResult(status=ExecutionStatus.SUCCESS)
+
+    await factory.run_cycle()
+
+    assert agent.overrides == [(None, None)]
+
+
+async def test_override_is_persisted_and_survives_reload(git_repo, tmp_path):
+    backlog = JSONBacklog(tmp_path / "backlog.json")
+    await backlog.create_task(
+        make_task(agent_command="claude -p \"$FACTORY_TASK\" --model cheap")
+    )
+    task = await backlog.get_task("TASK-001")
+    assert task.agent_command == "claude -p \"$FACTORY_TASK\" --model cheap"

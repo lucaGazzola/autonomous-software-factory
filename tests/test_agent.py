@@ -87,3 +87,47 @@ async def test_task_instruction_via_env(tmp_path):
     output = (repo / "out.txt").read_text(encoding="utf-8")
     assert "Add retries" in output
     assert "Implement retry logic." in output
+
+
+async def test_per_task_command_override(tmp_path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "marker.txt").write_text("", encoding="utf-8")
+    agent = ShellAgent("exit 1")
+    result = await agent.run_task(
+        TASK,
+        RepoContext(repo_path=repo, branch="main"),
+        command='echo "$FACTORY_TASK" > marker.txt',
+    )
+    assert result.status is ExecutionStatus.SUCCESS
+    output = (repo / "marker.txt").read_text(encoding="utf-8")
+    assert "Add retries" in output
+
+
+async def test_falls_back_to_configured_command():
+    agent = ShellAgent("exit 1")
+    result = await agent.run_task(TASK, RepoContext())
+    assert result.status is ExecutionStatus.ERROR
+
+
+async def test_per_task_timeout_override():
+    agent = ShellAgent("sleep 5")
+    result = await agent.run_task(TASK, RepoContext(), timeout_seconds=0.2)
+    assert result.status is ExecutionStatus.ERROR
+    assert "timed out after 0.2s" in (result.error or "")
+
+
+async def test_per_task_timeout_null_uses_configured_timeout():
+    agent = ShellAgent("sleep 0.2", timeout_seconds=5)
+    result = await agent.run_task(TASK, RepoContext(), timeout_seconds=None)
+    assert result.status is ExecutionStatus.SUCCESS
+
+
+async def test_per_task_argv_list_override():
+    agent = ShellAgent("exit 1")
+    result = await agent.run_task(
+        TASK,
+        RepoContext(),
+        command=["sh", "-c", "exit 2"],
+    )
+    assert result.status is ExecutionStatus.BLOCKED

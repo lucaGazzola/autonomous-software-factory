@@ -22,6 +22,17 @@ DEFAULT_REFACTOR_PROMPT = (
 )
 
 
+def _validate_agent_command(value: str | list[str] | None) -> str | list[str] | None:
+    """Shared validation: an agent command must be a non-blank string or list."""
+    if value is None:
+        return value
+    if isinstance(value, str) and not value.strip():
+        raise ValueError("agent_command must not be blank")
+    if isinstance(value, list) and not value:
+        raise ValueError("agent_command must not be an empty list")
+    return value
+
+
 def _utcnow() -> datetime:
     return datetime.now(UTC)
 
@@ -90,6 +101,13 @@ class Task(BaseModel):
     status: TaskStatus = TaskStatus.OPEN
     created_at: datetime = Field(default_factory=_utcnow)
     updated_at: datetime = Field(default_factory=_utcnow)
+    agent_command: str | list[str] | None = Field(default=None)
+    agent_timeout_seconds: float | None = Field(default=None, gt=0)
+
+    @field_validator("agent_command")
+    @classmethod
+    def _command_not_blank(cls, value: str | list[str] | None) -> str | list[str] | None:
+        return _validate_agent_command(value)
 
 
 class ExecutionResult(BaseModel):
@@ -166,12 +184,8 @@ class FactoryConfig(BaseModel):
 
     @field_validator("agent_command")
     @classmethod
-    def _command_not_blank(cls, value: str | list[str]) -> str | list[str]:
-        if isinstance(value, str) and not value.strip():
-            raise ValueError("agent_command must not be blank")
-        if isinstance(value, list) and not value:
-            raise ValueError("agent_command must not be an empty list")
-        return value
+    def _command_not_blank(cls, value: str | list[str]) -> str | list[str] | None:
+        return _validate_agent_command(value)
 
     @property
     def blocked_command(self) -> str:

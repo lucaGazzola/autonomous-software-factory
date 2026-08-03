@@ -52,9 +52,18 @@ class FakeAgent(BaseAgent):
         self.result = result or ExecutionResult(status=ExecutionStatus.SUCCESS)
         self.effect: Callable[[], None] | None = None
         self.calls: list[tuple[Task, RepoContext]] = []
+        self.overrides: list[tuple[str | list[str] | None, float | None]] = []
 
-    async def run_task(self, task: Task, context: RepoContext) -> ExecutionResult:
+    async def run_task(
+        self,
+        task: Task,
+        context: RepoContext,
+        *,
+        command: str | list[str] | None = None,
+        timeout_seconds: float | None = None,
+    ) -> ExecutionResult:
         self.calls.append((task, context))
+        self.overrides.append((command, timeout_seconds))
         if self.effect is not None:
             self.effect()
         return self.result

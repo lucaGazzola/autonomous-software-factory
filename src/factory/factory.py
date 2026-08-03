@@ -210,6 +210,8 @@ class Factory:
         result = await self.agent.run_task(
             task,
             RepoContext(repo_path=self.config.repo, branch=self.config.branch),
+            command=task.agent_command,
+            timeout_seconds=task.agent_timeout_seconds,
         )
         self._last_agent_result = result
 

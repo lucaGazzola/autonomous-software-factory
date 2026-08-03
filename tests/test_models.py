@@ -14,6 +14,39 @@ def test_task_defaults_to_open():
     assert task.status is TaskStatus.OPEN
     assert task.description == ""
     assert task.acceptance_criteria == []
+    assert task.agent_command is None
+    assert task.agent_timeout_seconds is None
+
+
+def test_task_accepts_agent_override_fields():
+    task = Task(
+        id="TASK-001",
+        title="t",
+        agent_command="claude -p \"$FACTORY_TASK\" --model cheap",
+        agent_timeout_seconds=120,
+    )
+    assert task.agent_command == "claude -p \"$FACTORY_TASK\" --model cheap"
+    assert task.agent_timeout_seconds == 120
+
+
+def test_task_agent_override_accepts_argv_list():
+    task = Task(id="TASK-001", title="t", agent_command=["sh", "-c", "exit 0"])
+    assert task.agent_command == ["sh", "-c", "exit 0"]
+
+
+def test_task_rejects_blank_agent_command():
+    with pytest.raises(ValidationError):
+        Task(id="TASK-001", title="t", agent_command="")
+
+
+def test_task_rejects_empty_agent_command_list():
+    with pytest.raises(ValidationError):
+        Task(id="TASK-001", title="t", agent_command=[])
+
+
+def test_task_rejects_non_positive_agent_timeout():
+    with pytest.raises(ValidationError):
+        Task(id="TASK-001", title="t", agent_timeout_seconds=0)
 
 
 def test_config_requires_agent_command():

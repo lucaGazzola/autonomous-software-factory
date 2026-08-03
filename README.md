@@ -116,6 +116,45 @@ Statuses: `OPEN` (to be picked), `BLOCKED` (waiting on you), `COMPLETED`,
 this spec to your favorite LLM to generate the initial backlog for the
 application you want to build.
 
+### Routing a task to a different agent
+
+A task can override the factory's `agent_command` (and optionally the
+`agent_timeout_seconds`) to route itself to a different model or agent. Set
+the fields on the task and the factory runs that command instead of the
+configured default; the task still arrives via `FACTORY_TASK` exactly as
+usual. Use it to send trivial tasks to a cheap/fast model and hard ones to a
+frontier model:
+
+```json
+{
+  "tasks": [
+    {
+      "id": "TASK-001",
+      "title": "Add docstrings to the public API",
+      "description": "Small, mechanical change.",
+      "agent_command": "claude -p \"$FACTORY_TASK\" --model claude-3-haiku",
+      "agent_timeout_seconds": 120,
+      "status": "OPEN",
+      "created_at": "2026-07-31T10:00:00Z"
+    },
+    {
+      "id": "TASK-002",
+      "title": "Rearchitect the cache layer",
+      "description": "Hard problem needing a strong model.",
+      "agent_command": "claude -p \"$FACTORY_TASK\" --model claude-3-opus",
+      "status": "OPEN",
+      "created_at": "2026-07-31T10:01:00Z"
+    }
+  ]
+}
+```
+
+`agent_command` may be a string or an argv list, and is validated like the
+global config key (non-blank). `agent_timeout_seconds` is optional and must be
+positive; when a task sets only one of the two fields, the other falls back to
+the global config value. Tasks without these fields keep using the configured
+default agent with unchanged behavior.
+
 ## Config (`factory.yaml`)
 
 The factory reads `factory.yaml` from the current directory. A commented

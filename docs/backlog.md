@@ -35,9 +35,37 @@ Each entry in `tasks` is a task object:
 | `dependencies` | list[string] | `[]` | Task ids this task depends on (informational; not enforced). |
 | `acceptance_criteria` | list[string] | `[]` | Rendered into the `FACTORY_TASK` instruction under an "Acceptance criteria:" heading. |
 | `files_to_modify` | list[string] | `[]` | Informational; hints for the agent. |
+| `agent_command` | string / list[string] | — | Override the configured `agent_command` for this task (e.g. route it to a different model). Validated like the global key; falls back to the config default when omitted. |
+| `agent_timeout_seconds` | number | — | Override the configured `agent_timeout_seconds` for this task (must be positive). Falls back to the config default when omitted. |
 
 Only `id`, `title`, and `status` (optionally) are required; every other field
 is optional.
+
+### Per-task agent routing
+
+A task may override the factory's coding agent by setting `agent_command`
+(and optionally `agent_timeout_seconds`). The factory then runs that command
+for that task instead of the configured default; the task still arrives as
+`FACTORY_TASK` exactly as usual. This lets you route trivial tasks to a
+cheap/fast model and hard ones to a frontier model:
+
+```json
+{
+  "tasks": [
+    {
+      "id": "TASK-001",
+      "title": "Add docstrings to the public API",
+      "agent_command": "claude -p \"$FACTORY_TASK\" --model claude-3-haiku",
+      "agent_timeout_seconds": 120
+    },
+    {
+      "id": "TASK-002",
+      "title": "Rearchitect the cache layer",
+      "agent_command": "claude -p \"$FACTORY_TASK\" --model claude-3-opus"
+    }
+  ]
+}
+```
 
 ## Statuses
 

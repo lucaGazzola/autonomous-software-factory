@@ -33,8 +33,19 @@ class BaseAgent(ABC):
     name: str = "base"
 
     @abstractmethod
-    async def run_task(self, task: Task, context: RepoContext) -> ExecutionResult:
+    async def run_task(
+        self,
+        task: Task,
+        context: RepoContext,
+        *,
+        command: str | list[str] | None = None,
+        timeout_seconds: float | None = None,
+    ) -> ExecutionResult:
         """Execute one task and return its result.
+
+        ``command`` and ``timeout_seconds`` optionally override the agent's
+        configured values for this single task; ``None`` means "use the
+        configured default".
 
         Implementations must never raise for expected agent failures — they
         should encode them as ``ExecutionResult(status=ERROR)``.
@@ -85,8 +96,22 @@ class ShellAgent(BaseAgent):
             text = raw.decode(errors="replace").rstrip("\r\n")
             lines.append(f"[{prefix}] {text}")
 
-    async def run_task(self, task: Task, context: RepoContext) -> ExecutionResult:
-        """Run the configured command once for the task."""
+    async def run_task(
+        self,
+        task: Task,
+        context: RepoContext,
+        *,
+        command: str | list[str] | None = None,
+        timeout_seconds: float | None = None,
+    ) -> ExecutionResult:
+        """Run the configured command once for the task.
+
+        ``command`` and ``timeout_seconds`` override this agent's configured
+        values for this run when given; otherwise the configured defaults are
+        used.
+        """
+        command = command if command is not None else self.command
+        timeout = timeout_seconds if timeout_seconds is not None else self.timeout_seconds
         logs: list[str] = [f"[{self.name}] Running task {task.id} ({task.title})"]
         env = {
             **os.environ,
@@ -97,9 +122,9 @@ class ShellAgent(BaseAgent):
         }
 
         try:
-            if isinstance(self.command, str):
+            if isinstance(command, str):
                 proc = await asyncio.create_subprocess_shell(
-                    self.command,
+                    command,
                     cwd=str(context.repo_path),
                     env=env,
                     stdout=asyncio.subprocess.PIPE,
@@ -107,7 +132,7 @@ class ShellAgent(BaseAgent):
                 )
             else:
                 proc = await asyncio.create_subprocess_exec(
-                    *self.command,
+                    *command,
                     cwd=str(context.repo_path),
                     env=env,
                     stdout=asyncio.subprocess.PIPE,
@@ -129,7 +154,7 @@ class ShellAgent(BaseAgent):
 
         timed_out = False
         try:
-            await asyncio.wait_for(proc.wait(), timeout=self.timeout_seconds)
+            await asyncio.wait_for(proc.wait(), timeout=timeout)
         except TimeoutError:
             timed_out = True
             proc.kill()
@@ -140,7 +165,7 @@ class ShellAgent(BaseAgent):
         logs.extend(stream_lines)
 
         if timed_out:
-            label = f" after {self.timeout_seconds:g}s" if self.timeout_seconds is not None else ""
+            label = f" after {timeout:g}s" if timeout is not None else ""
             logs.append(f"[{self.name}] Execution timed out{label}; process killed.")
             return ExecutionResult(
                 status=ExecutionStatus.ERROR,
