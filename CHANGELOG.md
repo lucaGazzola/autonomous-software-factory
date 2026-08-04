@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `web_host` config option: the web dashboard/API bind address. Default
+  `127.0.0.1` (unchanged behavior); set `0.0.0.0` to reach it from other
+  hosts on the local network.
+
 ## [0.2.0] - 2026-08-04
 
 ### Added

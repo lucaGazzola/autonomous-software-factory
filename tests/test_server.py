@@ -140,6 +140,27 @@ def test_busy_port_logs_error_and_returns_false(api_env, caplog):
         first.stop()
 
 
+def test_custom_bind_host(api_env):
+    config, backlog, _ = api_env
+    import socket
+
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.bind(("127.0.0.1", 0))
+    port = sock.getsockname()[1]
+    sock.close()
+    server = WebServer(
+        config.model_copy(update={"web_host": "0.0.0.0", "web_port": port}),
+        backlog,
+    )
+    assert server.start() is True
+    try:
+        status, data = _get(f"http://127.0.0.1:{server.port}/api/status")
+        assert status == 200
+        assert isinstance(data, dict)
+    finally:
+        server.stop()
+
+
 def test_api_tasks_list(running_server):
     server, _config, _backlog = running_server
     status, data = _get(f"http://127.0.0.1:{server.port}/api/tasks")

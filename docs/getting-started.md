@@ -84,6 +84,8 @@ The daemon wakes up every `interval_minutes` and runs one cycle. It runs in
 the foreground — interrupt it with Ctrl-C, or stop it from another terminal
 with `factory stop`. A local web dashboard is served at
 <http://127.0.0.1:8787> (see [Web console & HTTP API](web-console-api.md)).
+Set `web_host: 0.0.0.0` in `factory.yaml` to make the dashboard reachable
+from other hosts on your network.
 
 ## 5. Verify
 

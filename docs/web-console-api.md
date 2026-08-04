@@ -1,8 +1,10 @@
 # Web console & HTTP API
 
 While the daemon is running, it serves a **read-only local web dashboard and
-HTTP API** at `http://127.0.0.1:<web_port>` (default port `8787`). The server
-binds **`127.0.0.1` only** — it is not reachable from other machines.
+HTTP API** at `http://<web_host>:<web_port>` (default `127.0.0.1:8787`). By
+default the server binds **`127.0.0.1` only** — it is not reachable from
+other machines. Set `web_host: 0.0.0.0` in `factory.yaml` to make it
+reachable from your local network (open the port in your firewall too).
 
 - Disable it entirely with `web_port: 0` in `factory.yaml`.
 - A bind failure is logged and the daemon continues without the API.
@@ -129,6 +131,8 @@ curl -s http://127.0.0.1:8787/api/status
 
 ## Security notes
 
-- The server binds `127.0.0.1` only.
+- The server binds `web_host` (default `127.0.0.1`). Exposing it on a
+  network (`web_host: 0.0.0.0`) makes the read-only API visible to every
+  host that can reach the port — only do that on a trusted LAN.
 - It is read-only — there are no write endpoints.
 - Set `web_port: 0` to disable it if you do not need it.

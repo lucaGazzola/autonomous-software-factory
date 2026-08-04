@@ -1,7 +1,8 @@
 """Read-only local HTTP API served while the factory daemon is running.
 
-Binds ``127.0.0.1`` only (stdlib ``http.server`` / ``socketserver``). A bind
-failure is logged and the daemon continues without the API.
+Binds ``config.web_host`` (default ``127.0.0.1``) using the stdlib
+``http.server`` / ``socketserver``. A bind failure is logged and the daemon
+continues without the API.
 """
 
 from __future__ import annotations
@@ -231,16 +232,18 @@ class WebServer:
     def start(self, loop: asyncio.AbstractEventLoop | None = None) -> bool:
         """Bind and start serving. Returns False when disabled or bind fails."""
         port = self.config.web_port
+        host = self.config.web_host
         if port == 0:
             logger.info("Web server disabled (web_port=0).")
             return False
         self.state.loop = loop
         handler = make_handler(self.state)
         try:
-            httpd = ThreadingHTTPServer(("127.0.0.1", port), handler)
+            httpd = ThreadingHTTPServer((host, port), handler)
         except OSError as exc:
             logger.error(
-                "Web server failed to bind 127.0.0.1:%s: %s",
+                "Web server failed to bind %s:%s: %s",
+                host,
                 port,
                 exc,
             )
@@ -253,7 +256,11 @@ class WebServer:
         )
         self._thread = thread
         thread.start()
-        logger.info("Web server listening on http://127.0.0.1:%s", httpd.server_address[1])
+        logger.info(
+            "Web server listening on http://%s:%s",
+            host,
+            httpd.server_address[1],
+        )
         return True
 
     def stop(self) -> None:

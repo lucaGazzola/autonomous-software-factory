@@ -30,6 +30,7 @@ use `factory restart` so it re-reads the file.
 | `blocked_exit_code` | `2` | Exit code meaning "needs human input". |
 | `refactor_prompt` | default refactor prompt | Instruction used when the backlog is empty. |
 | `log_file` | `factory.log` | Where the daemon writes its log. |
+| `web_host` | `127.0.0.1` | Web server bind address (`0.0.0.0` exposes it on the LAN). |
 | `web_port` | `8787` | Local web dashboard / HTTP API port (`0` disables the server). |
 | `git_timeout_seconds` | `120` | Kill a git subprocess after this many seconds. |
 | `telegram_bot_token` | — | Telegram bot token for blocked-run notifications (disabled unless `telegram_chat_id` is also set). |
@@ -134,11 +135,18 @@ When set, successful commits are pushed to `<remote> <branch>`. When omitted,
 the factory only commits locally. A push failure never discards the commit —
 the work stays committed locally and the error is logged.
 
+### `web_host`
+
+Bind address of the web dashboard / HTTP API. Default `127.0.0.1` (this
+machine only). Set `0.0.0.0` to reach it from other hosts on your local
+network (also open the port in your firewall).
+
 ### `web_port`
 
 Port for the local web dashboard / HTTP API served while the daemon is
-running. Binds `127.0.0.1` only. Set to `0` to disable the server entirely. A
-bind failure is logged and the daemon continues without the API.
+running. Binds `web_host` (default `127.0.0.1`). Set to `0` to disable the
+server entirely. A bind failure is logged and the daemon continues without
+the API.
 
 ### Telegram notifications
 

@@ -63,6 +63,7 @@ def test_config_defaults():
     assert config.git_timeout_seconds == 120
     assert config.refactor_prompt == DEFAULT_REFACTOR_PROMPT
     assert config.web_port == 8787
+    assert config.web_host == "127.0.0.1"
     assert config.telegram_bot_token is None
     assert config.telegram_chat_id is None
 

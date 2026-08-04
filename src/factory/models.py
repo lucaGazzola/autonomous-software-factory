@@ -180,8 +180,11 @@ class FactoryConfig(BaseModel):
         refactor_prompt: Instruction used for the refactoring run that
             happens when the backlog has no runnable task.
         log_file: Where the scheduled factory writes its log.
-        web_port: Local HTTP API port (``127.0.0.1`` only). Default 8787;
-            set to ``0`` to disable the server.
+        web_host: Bind address of the web server. Default ``127.0.0.1``
+            (localhost only); set to ``0.0.0.0`` to expose it on the local
+            network.
+        web_port: Local HTTP API port. Default 8787; set to ``0`` to disable
+            the server.
         telegram_bot_token: Telegram bot token for blocked-run
             notifications. Disabled unless ``telegram_chat_id`` is also set.
         telegram_chat_id: Chat ID that receives blocked-run notifications.
@@ -206,6 +209,7 @@ class FactoryConfig(BaseModel):
     git_timeout_seconds: float = Field(default=120, gt=0)
     refactor_prompt: str = DEFAULT_REFACTOR_PROMPT
     log_file: str = "factory.log"
+    web_host: str = "127.0.0.1"
     web_port: int = Field(default=8787, ge=0, le=65535)
     telegram_bot_token: str | None = None
     telegram_chat_id: str | None = None

@@ -42,7 +42,7 @@ The daemon wakes every `interval_minutes` and runs one cycle. When no config
 exists, `factory start` offers the guided setup. A second `start` (or `once`)
 is refused while the per-factory lock is held.
 
-While running it serves a local web dashboard at `http://127.0.0.1:<web_port>`
+While running it serves a local web dashboard at `http://<web_host>:<web_port>`
 (see [Web console & HTTP API](web-console-api.md)) and logs to `log_file`.
 
 ## `factory once`

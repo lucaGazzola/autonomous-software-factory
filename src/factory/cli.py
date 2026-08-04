@@ -287,7 +287,7 @@ def cmd_start(args: argparse.Namespace) -> int:
             except NotImplementedError:
                 pass
         web_line = (
-            f"\n[bold]Web:[/bold] http://127.0.0.1:{config.web_port}"
+            f"\n[bold]Web:[/bold] http://{config.web_host}:{config.web_port}"
             if config.web_port
             else ""
         )
