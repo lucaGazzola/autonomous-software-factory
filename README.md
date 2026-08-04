@@ -3,102 +3,72 @@
 [![CI](https://github.com/lucaGazzola/forgeo/actions/workflows/ci.yml/badge.svg)](https://github.com/lucaGazzola/forgeo/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A scheduled, agent-driven software factory for one repository. Every
-`interval_minutes` it:
+**Forgeo is an autonomous software factory for people with ideas, not teams.**
+You have a product idea — an app, a website, an internal automation — but no
+developers on staff. With Forgeo you don't need any: you write down what needs
+to be built as a simple list of tasks, and an AI coding agent works through the
+list on its own, writing the code and committing it to your repository. No
+branches, no pull requests, no developer to hire.
 
-1. picks the oldest `OPEN` task from the backlog, runs it through a coding
-   agent, and commits + pushes the result directly on `main` — no branches,
-   no PRs;
-2. if the backlog is empty, runs the agent in refactoring mode and commits
-   whatever it improves;
-3. if the agent signals it needs a human decision, writes `BLOCKER.md` with
-   what you must do, and pauses until you resolve it.
+All you need is basic comfort with a terminal, a git repository, and any coding
+agent CLI — Claude Code, aider, opencode, or your own script. Forgeo works with
+all of them.
 
-## Setup
+Forgeo decides what to do next on its own: while tasks are left it implements
+the oldest one and commits the result, and when the backlog is empty it reviews
+the codebase and cleans it up. It only interrupts you when a decision is
+genuinely yours to make — everything else happens autonomously.
 
-Requires Python 3.11+. Install the `factory` CLI from the public GitHub
-remote with the one-liner:
+## Quickstart
+
+### 1. Install
+
+Requires Python 3.11+:
 
 ```bash
 curl -fsSL https://forgeo.org/install.sh | bash
-factory init          # guided setup: folder, agent command, refactor prompt
-factory start
 ```
 
-The installer prefers `pipx` and falls back to `pip install --user`; it never
-needs root, and re-running it upgrades the install.
+The installer prefers `pipx`, falls back to `pip install --user`, never needs
+root, and re-running it upgrades the install.
 
-## Running the factory
+### 2. Create your factory
 
-All commands below read `factory.yaml` from the current directory; pass
-`--config <file>` to use a different one.
-
-### First-time setup
+Run the guided wizard from your project root:
 
 ```bash
-factory init             # guided wizard: repo folder, agent command, refactor prompt
-factory init --force     # overwrite an existing factory.yaml
+factory init
 ```
 
-`factory init` writes a `factory.yaml`. Bare `factory` (no subcommand) starts
-the wizard when no config exists, and prints the CLI help once a config is
-present.
+It asks for your factory folder, your coding agent command, and the refactor
+prompt — then writes `factory.yaml` and a `.factory/` folder for the backlog
+and logs, gitignored for you.
 
-### Start the daemon
+Or write `factory.yaml` by hand — this is all it takes:
 
-```bash
-factory start                        # run the schedule forever
-factory start --interval-minutes 5   # override the interval for this run
+```yaml
+name: my-project
+repo: .
+interval_minutes: 30
+backlog: .factory/backlog.json
+
+agent_command: "claude -p \"$FACTORY_TASK\""
+refactor_prompt: >
+  Review the codebase for improvement opportunities that do not change
+  behavior, run the test suite, and apply safe changes.
 ```
 
-The daemon wakes up every `interval_minutes` and runs one cycle (pick the
-oldest `OPEN` task, or a refactoring pass when the backlog is empty). It runs
-in the foreground — interrupt it with Ctrl-C, or stop it from another
-terminal with `factory stop`. Logs go to `factory.log` (rotating: 5 MB × 3),
-and a local web dashboard is served at <http://127.0.0.1:8787> (disable it
-with `web_port: 0` in the config). The dashboard is a self-contained
-HTML/CSS/JS page in `src/factory/web/` that shows the backlog grouped by
-status plus daemon status, and auto-refreshes every 30 seconds (see
-[`docs/web-console-api.md`](docs/web-console-api.md)).
+`agent_command` is the heart of it: any CLI agent that can work in a
+repository, with the task delivered in the `FACTORY_TASK` environment
+variable. Every other key — branch, remote, sandboxing, notifications — is
+documented in the [configuration reference](docs/configuration.md).
 
-### Run a single cycle
+All commands read `factory.yaml` from the current directory; pass
+`--config <file>` to point at a different one.
 
-```bash
-factory once    # run exactly one cycle and exit; no daemon needed
-```
+### 3. Write your backlog
 
-`factory once` shares the run lock with the daemon, so it never overlaps a
-running `factory start` — useful to test a config or process a backlog
-without leaving a daemon up.
-
-### Check status
-
-```bash
-factory status    # config, backlog counts, next OPEN task, daemon up?, last outcome
-pgrep -af factory # process check; empty output = not running
-```
-
-### Stop and restart
-
-```bash
-factory stop                # graceful shutdown (SIGTERM; a cycle in progress finishes first)
-factory stop --timeout 60   # wait at most 60 s for the daemon to exit
-factory restart             # stop, then start again in the background, re-reading factory.yaml
-```
-
-The daemon reads `factory.yaml` only at startup, so after editing the config
-use `factory restart` — it re-reads the file.
-
-### Where state lives
-
-- `factory.log` — daemon / cycle log (also shown in the web dashboard).
-- `backlog.lock` — lock file next to the backlog, holding the daemon PID. It
-  is released automatically when the process exits, even on a crash, so a
-  leftover file alone does not mean the daemon is still running.
-
-## The backlog
-
-A plain JSON file you edit by hand:
+The backlog is a plain JSON file — create the one `factory.yaml` points at:
 
 ```json
 {
@@ -109,42 +79,13 @@ A plain JSON file you edit by hand:
       "description": "Write a fibonacci module with memoization and tests.",
       "status": "OPEN",
       "created_at": "2026-07-31T10:00:00Z"
-    }
-  ]
-}
-```
-
-Statuses: `OPEN` (to be picked), `BLOCKED` (waiting on you), `COMPLETED`,
-`FAILED`. Add, remove, or reopen tasks by editing the file directly. Tip: hand
-this spec to your favorite LLM to generate the initial backlog for the
-application you want to build.
-
-### Routing a task to a different agent
-
-A task can override the factory's `agent_command` (and optionally the
-`agent_timeout_seconds`) to route itself to a different model or agent. Set
-the fields on the task and the factory runs that command instead of the
-configured default; the task still arrives via `FACTORY_TASK` exactly as
-usual. Use it to send trivial tasks to a cheap/fast model and hard ones to a
-frontier model:
-
-```json
-{
-  "tasks": [
+    },
     {
-      "id": "TASK-001",
+      "id": "TASK-002",
       "title": "Add docstrings to the public API",
       "description": "Small, mechanical change.",
       "agent_command": "claude -p \"$FACTORY_TASK\" --model claude-3-haiku",
       "agent_timeout_seconds": 120,
-      "status": "OPEN",
-      "created_at": "2026-07-31T10:00:00Z"
-    },
-    {
-      "id": "TASK-002",
-      "title": "Rearchitect the cache layer",
-      "description": "Hard problem needing a strong model.",
-      "agent_command": "claude -p \"$FACTORY_TASK\" --model claude-3-opus",
       "status": "OPEN",
       "created_at": "2026-07-31T10:01:00Z"
     }
@@ -152,45 +93,29 @@ frontier model:
 }
 ```
 
-`agent_command` may be a string or an argv list, and is validated like the
-global config key (non-blank). `agent_timeout_seconds` is optional and must be
-positive; when a task sets only one of the two fields, the other falls back to
-the global config value. Tasks without these fields keep using the configured
-default agent with unchanged behavior.
+Statuses: `OPEN` (next up), `BLOCKED` (waiting on you), `COMPLETED`, `FAILED`.
+Add, remove, or reopen tasks by editing the file — no tool needed. A task can
+also override the factory's agent with its own `agent_command`: use a
+cheap/fast model for trivial tasks and a frontier one for the hard cases. Full
+task schema in the [backlog format](docs/backlog.md).
 
-## Config (`factory.yaml`)
+Tip: hand this file to your favorite LLM together with a description of your
+product to generate the initial backlog.
 
-The factory reads `factory.yaml` from the current directory. A commented
-example config lives in [`config/factory.yaml`](config/factory.yaml) — copy it
-to your factory directory and adjust. `factory init` writes one for you
-interactively. The file is machine-specific, so it is not committed to this
-repository.
+### 4. Run the factory
 
-| Key | Meaning |
-| --- | --- |
-| `name` | Display name (logs, commit messages). |
-| `repo` | The git repository the factory works on. |
-| `interval_minutes` | How often the factory runs. |
-| `branch` | The single branch everything is committed to (default `main`). |
-| `remote` | Remote to push to; omit to only commit locally. |
-| `backlog` | The task backlog JSON (keep it outside the repo). |
-| `blocker_file` | Where `BLOCKER.md` is written (default `BLOCKER.md`). |
-| `agent_command` | The coding agent: any shell command (string or argv list). |
-| `agent_timeout_seconds` | Optional: kill the agent after this many seconds. |
-| `agent_env` | Extra environment variables for the agent process. |
-| `agent_sandbox` | Agent isolation mode: `none` (default, runs on the host) or `docker`. |
-| `agent_sandbox_image` | Container image (required with `docker`); must contain the agent CLI and a shell. |
-| `agent_sandbox_network` | Docker `--network` for the sandboxed agent (default `none`, i.e. networking disabled). |
-| `agent_sandbox_mounts` | Host paths mounted read-only into the sandboxed container (agent credentials/config). |
-| `blocked_exit_code` | Exit code meaning "needs human input" (default `2`). |
-| `refactor_prompt` | Instruction used when the backlog is empty. |
-| `log_file` | Where the daemon writes its log (default `factory.log`). |
-| `web_port` | Local web dashboard port (default `8787`; `0` disables the server). |
-| `git_timeout_seconds` | Kill a git subprocess after this many seconds (default `120`). |
-| `telegram_bot_token` | Optional Telegram bot token for blocked-run notifications (disabled unless `telegram_chat_id` is also set). |
-| `telegram_chat_id` | Optional chat ID that receives blocked-run notifications (disabled unless `telegram_bot_token` is also set). |
+```bash
+factory start     # run forever: every interval_minutes, implement the oldest OPEN task
+factory once      # run a single cycle and exit — useful to test your setup
+factory status    # config, backlog counts, next task, daemon running?
+factory stop      # graceful shutdown (from another terminal)
+factory restart   # re-read factory.yaml after editing it
+```
 
-Relative paths resolve against the config file's directory.
+`factory start` runs in the foreground (Ctrl-C to stop) and serves a local
+dashboard at <http://127.0.0.1:8787> while it runs. Everything is stored in
+plain files: the backlog, `factory.log`, and `BLOCKER.md` whenever a decision
+is pending. Every command is detailed in the [CLI reference](docs/cli-reference.md).
 
 ## The coding agent
 
