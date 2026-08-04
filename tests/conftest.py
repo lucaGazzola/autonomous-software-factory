@@ -1,4 +1,5 @@
-"""Shared fixtures: a real git repository and a scriptable fake agent."""
+"""Shared fixtures: a real git repository, a scriptable fake agent, and
+factories for configs, tasks, and the Factory wiring used across suites."""
 
 from __future__ import annotations
 
@@ -9,6 +10,9 @@ from pathlib import Path
 import pytest
 
 from factory.agent import BaseAgent
+from factory.backlog import JSONBacklog
+from factory.factory import Factory
+from factory.git import GitManager
 from factory.models import (
     ExecutionResult,
     ExecutionStatus,
@@ -69,6 +73,25 @@ class FakeAgent(BaseAgent):
         return self.result
 
 
+class FakeFactory:
+    """A runnable stand-in for :class:`Factory`: counts cycles, can block or crash."""
+
+    def __init__(self) -> None:
+        self.cycles = 0
+        self.crash = False
+        self.block = False
+
+    async def run_cycle(self) -> str:
+        if self.block:
+            import asyncio
+
+            await asyncio.sleep(3600)
+        if self.crash:
+            raise RuntimeError("boom")
+        self.cycles += 1
+        return "task"
+
+
 def make_config(git_repo: Path, tmp_path: Path, **overrides) -> FactoryConfig:
     """A factory config wired to the fixture repo and an out-of-repo backlog."""
     defaults = {
@@ -86,3 +109,14 @@ def make_task(**overrides) -> Task:
     defaults = {"id": "TASK-001", "title": "Do the thing", "description": "Build it."}
     defaults.update(overrides)
     return Task(**defaults)
+
+
+def make_factory(
+    git_repo: Path, tmp_path: Path, **overrides
+) -> tuple[Factory, FakeAgent, JSONBacklog]:
+    """A real :class:`Factory` wired to the fixture repo and a fake agent."""
+    config = make_config(git_repo, tmp_path, **overrides)
+    agent = FakeAgent()
+    backlog = JSONBacklog(config.backlog)
+    factory = Factory(config, backlog, agent, GitManager(git_repo))
+    return factory, agent, backlog

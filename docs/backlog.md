@@ -93,17 +93,10 @@ the order in which tasks are processed.
 
 ## How a task is executed
 
-1. The factory ensures the configured branch exists and the working tree is
-   clean.
-2. The agent runs with the repository as its working directory; the task
-   (title, description, acceptance criteria) arrives as `FACTORY_TASK`.
-3. Exit `0` → the work is committed as `factory: <title> (#<id>)`, pushed if a
-   remote is set, and the task becomes `COMPLETED`.
-4. Exit `blocked_exit_code` → partial work is committed as
-   `factory: <title> (#<id>) [partial]`, `BLOCKER.md` explains what you must
-   do, optionally Telegram is notified, and the task becomes `BLOCKED`.
-5. Any other exit code → changes are discarded (`git reset --hard` +
-   `git clean -fd`), the failure is logged, and the task becomes `FAILED`.
+Once picked, the task is handed to the agent as `FACTORY_TASK`, and the exit
+code decides what happens to the work (commit & push, partial commit +
+`BLOCKER.md`, or discard). See [Agent contract](agent-contract.md) for the
+full mapping.
 
 ## Corruption tolerance
 
@@ -115,9 +108,3 @@ The backlog reader is defensive:
   factory starts from an empty store — nothing is silently discarded;
 - an unparsable task row is kept as a `FAILED` task rather than killing the
   whole store.
-
-## Generating an initial backlog
-
-There is no backlog editor in the CLI — the backlog is a hand-edited file.
-Tip: hand this spec to your favorite LLM along with a description of your
-application to generate the initial `tasks` array.

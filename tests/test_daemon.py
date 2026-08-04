@@ -7,24 +7,7 @@ import logging
 import os
 
 from factory.daemon import FactoryDaemon, RunLock, acquire_run_lock, is_lock_held, read_lock_pid
-from tests.conftest import make_config
-
-
-class FakeFactory:
-    """Records the cycle count; can block or crash on demand."""
-
-    def __init__(self) -> None:
-        self.cycles = 0
-        self.crash = False
-        self.block = False
-
-    async def run_cycle(self) -> str:
-        if self.block:
-            await asyncio.sleep(3600)
-        if self.crash:
-            raise RuntimeError("boom")
-        self.cycles += 1
-        return "task"
+from tests.conftest import FakeFactory, make_config
 
 
 def make_daemon(git_repo, tmp_path, interval=1, **overrides) -> FactoryDaemon:

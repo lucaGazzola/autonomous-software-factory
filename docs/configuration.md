@@ -89,9 +89,9 @@ agent_env:
 
 ### `blocked_exit_code`
 
-The exit code the agent uses to signal "I need a human decision". On this
-exit code the factory commits the agent's partial work, writes `BLOCKER.md`,
-optionally notifies Telegram, and marks the task `BLOCKED`. Default `2`.
+The exit code the agent uses to signal "I need a human decision" — see
+[Agent contract](agent-contract.md) for what happens on that exit code.
+Default `2`.
 
 ### `agent_sandbox`
 
@@ -137,16 +137,15 @@ the work stays committed locally and the error is logged.
 
 ### `web_host`
 
-Bind address of the web dashboard / HTTP API. Default `127.0.0.1` (this
-machine only). Set `0.0.0.0` to reach it from other hosts on your local
-network (also open the port in your firewall).
+Bind address of the web dashboard / HTTP API (default `127.0.0.1`, this
+machine only). Set `0.0.0.0` to expose it on the local network. See
+[Web console & HTTP API](web-console-api.md).
 
 ### `web_port`
 
-Port for the local web dashboard / HTTP API served while the daemon is
-running. Binds `web_host` (default `127.0.0.1`). Set to `0` to disable the
-server entirely. A bind failure is logged and the daemon continues without
-the API.
+Port for the web dashboard / HTTP API served while the daemon runs (default
+`8787`). Set to `0` to disable the server. See
+[Web console & HTTP API](web-console-api.md).
 
 ### Telegram notifications
 

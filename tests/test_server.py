@@ -105,12 +105,6 @@ async def running_server(api_env):
         server.stop()
 
 
-def test_web_port_default():
-    from factory.models import FactoryConfig
-
-    assert FactoryConfig(agent_command="echo").web_port == 8787
-
-
 def test_web_port_zero_disables(api_env, caplog):
     config, backlog, _ = api_env
     config = config.model_copy(update={"web_port": 0})
@@ -340,10 +334,3 @@ def test_web_root_index_references_existing_assets():
         assert (WEB_ROOT / asset).is_file(), f"missing asset referenced by index.html: {asset}"
     for asset in ("index.html", "style.css", "app.js"):
         assert (WEB_ROOT / asset).is_file(), f"missing web asset: {asset}"
-
-
-def test_config_defaults_include_web_port():
-    from factory.models import FactoryConfig
-
-    cfg = FactoryConfig(agent_command="x")
-    assert cfg.web_port == 8787

@@ -6,9 +6,6 @@ import json
 import logging
 from datetime import UTC, datetime
 
-from factory.backlog import JSONBacklog
-from factory.factory import Factory
-from factory.git import GitManager
 from factory.models import (
     ExecutionResult,
     ExecutionStatus,
@@ -18,15 +15,7 @@ from factory.models import (
     TaskStatus,
 )
 from factory.runs import RunRecorder, runs_path_for
-from tests.conftest import FakeAgent, git, make_config, make_task
-
-
-def make_factory(git_repo, tmp_path, **overrides) -> tuple[Factory, FakeAgent, JSONBacklog]:
-    config = make_config(git_repo, tmp_path, **overrides)
-    agent = FakeAgent()
-    backlog = JSONBacklog(config.backlog)
-    factory = Factory(config, backlog, agent, GitManager(git_repo))
-    return factory, agent, backlog
+from tests.conftest import git, make_factory, make_task
 
 
 def read_lines(path) -> list[dict]:

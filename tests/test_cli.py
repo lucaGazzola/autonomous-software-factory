@@ -18,26 +18,13 @@ from factory.cli import (
     cmd_restart,
     cmd_status,
     cmd_stop,
-    last_outcome_from_log,
     last_outcome_from_runs,
-    next_open_task,
     render_status,
 )
 from factory.daemon import acquire_run_lock, is_lock_held, read_lock_pid
 from factory.models import RunKind, RunOutcome, RunRecord, TaskStatus
 from factory.runs import RunRecorder, runs_path_for
-from tests.conftest import make_config, make_task
-
-
-class FakeFactory:
-    """Records the cycle count and returns a fixed outcome."""
-
-    def __init__(self) -> None:
-        self.cycles = 0
-
-    async def run_cycle(self) -> str:
-        self.cycles += 1
-        return "task"
+from tests.conftest import FakeFactory, make_config, make_task
 
 
 def write_config(git_repo: Path, tmp_path: Path, **overrides) -> Path:
@@ -178,47 +165,6 @@ def test_backlog_status_counts_by_status():
         "COMPLETED": 1,
         "FAILED": 1,
     }
-
-
-def test_next_open_task_picks_oldest():
-    older = make_task(
-        id="OLD",
-        title="Older",
-        created_at=datetime(2026, 1, 1, tzinfo=UTC),
-    )
-    newer = make_task(
-        id="NEW",
-        title="Newer",
-        created_at=datetime(2026, 6, 1, tzinfo=UTC),
-    )
-    done = make_task(id="DONE", status=TaskStatus.COMPLETED)
-    assert next_open_task([newer, done, older]) is older
-
-
-def test_next_open_task_none_when_empty_or_no_open():
-    assert next_open_task([]) is None
-    assert next_open_task([make_task(status=TaskStatus.COMPLETED)]) is None
-
-
-def test_last_outcome_from_log_missing(tmp_path):
-    assert last_outcome_from_log(tmp_path / "missing.log") is None
-
-
-def test_last_outcome_from_log_parses_last_marker(tmp_path):
-    log = tmp_path / "factory.log"
-    log.write_text(
-        "2026-08-01 01:00:00 INFO     factory.daemon: Run finished: dirty\n"
-        "2026-08-01 02:00:00 INFO     factory.factory: Task done\n"
-        "2026-08-01 02:00:01 INFO     factory.daemon: Run finished: task\n",
-        encoding="utf-8",
-    )
-    assert last_outcome_from_log(log) == "task"
-
-
-def test_last_outcome_from_log_no_marker(tmp_path):
-    log = tmp_path / "factory.log"
-    log.write_text("no outcomes here\n", encoding="utf-8")
-    assert last_outcome_from_log(log) is None
 
 
 def test_render_status_includes_summary_fields(git_repo, tmp_path):

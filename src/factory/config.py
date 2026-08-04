@@ -24,12 +24,13 @@ def load_config(path: str | Path) -> FactoryConfig:
     payload = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
     config = FactoryConfig.model_validate(payload)
     base = config_path.parent.resolve()
+    updates: dict[str, Path | str] = {}
     if not config.repo.is_absolute():
-        config = config.model_copy(update={"repo": base / config.repo})
+        updates["repo"] = base / config.repo
     if not config.backlog.is_absolute():
-        config = config.model_copy(update={"backlog": base / config.backlog})
+        updates["backlog"] = base / config.backlog
     if not config.blocker_file.is_absolute():
-        config = config.model_copy(update={"blocker_file": base / config.blocker_file})
+        updates["blocker_file"] = base / config.blocker_file
     if not Path(config.log_file).is_absolute():
-        config = config.model_copy(update={"log_file": str(base / config.log_file)})
-    return config
+        updates["log_file"] = str(base / config.log_file)
+    return config if not updates else config.model_copy(update=updates)

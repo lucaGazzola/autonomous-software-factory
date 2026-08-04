@@ -24,6 +24,14 @@ from factory.models import Task, TaskStatus
 logger = logging.getLogger(__name__)
 
 
+def oldest_open_task(tasks: list[Task]) -> Task | None:
+    """Return the oldest OPEN task (smallest ``created_at``), or ``None``."""
+    open_tasks = [task for task in tasks if task.status is TaskStatus.OPEN]
+    if not open_tasks:
+        return None
+    return min(open_tasks, key=lambda task: task.created_at)
+
+
 class JSONBacklog:
     """A backlog stored in a single JSON document on disk."""
 
@@ -38,11 +46,7 @@ class JSONBacklog:
 
     async def fetch_next_task(self) -> Task | None:
         """Return the oldest OPEN task, or ``None`` when there is none."""
-        tasks = await self.list_tasks()
-        open_tasks = [t for t in tasks if t.status is TaskStatus.OPEN]
-        if not open_tasks:
-            return None
-        return min(open_tasks, key=lambda t: t.created_at)
+        return oldest_open_task(await self.list_tasks())
 
     async def get_task(self, task_id: str) -> Task | None:
         """Return a task by id, or ``None`` if it does not exist."""

@@ -206,32 +206,59 @@ class Factory:
     async def _run_task(self, task: Task) -> None:
         """Execute one task: agent run, then commit/push on the main branch."""
         logger.info("Running task %s (%s)", task.id, task.title)
-        self._last_task = task
-        result = await self.agent.run_task(
+        result, ok = await self._run_agent(
             task,
-            RepoContext(repo_path=self.config.repo, branch=self.config.branch),
+            instruction=task.instruction,
+            success_message=f"factory: {task.title} (#{task.id})",
+            blocked_message=f"factory: {task.title} (#{task.id}) [partial]",
             command=task.agent_command,
             timeout_seconds=task.agent_timeout_seconds,
         )
-        self._last_agent_result = result
 
         if result.status is ExecutionStatus.BLOCKED:
             await self.backlog.update_status(task.id, TaskStatus.BLOCKED)
-
-        ok = await self._handle_execution_result(
-            result,
-            task=task,
-            success_message=f"factory: {task.title} (#{task.id})",
-            blocked_message=f"factory: {task.title} (#{task.id}) [partial]",
-            instruction=task.instruction,
-        )
-
         if result.status is ExecutionStatus.SUCCESS and ok:
             await self.backlog.update_status(task.id, TaskStatus.COMPLETED)
             self.config.blocker_file.unlink(missing_ok=True)
             logger.info("Task %s completed.", task.id)
         elif result.status is ExecutionStatus.ERROR:
             await self.backlog.update_status(task.id, TaskStatus.FAILED)
+
+    async def _run_agent(
+        self,
+        task: Task,
+        *,
+        instruction: str,
+        success_message: str,
+        blocked_message: str,
+        command: str | list[str] | None = None,
+        timeout_seconds: float | None = None,
+        is_refactor: bool = False,
+    ) -> tuple[ExecutionResult, bool]:
+        """Run the agent for one task or refactoring pass and apply the
+        shared SUCCESS / BLOCKED / ERROR side effects (see
+        :meth:`_handle_execution_result`).
+
+        Returns the execution result and whether the SUCCESS commit path
+        succeeded, so callers can apply backlog status transitions.
+        """
+        self._last_task = task
+        result = await self.agent.run_task(
+            task,
+            RepoContext(repo_path=self.config.repo, branch=self.config.branch),
+            command=command,
+            timeout_seconds=timeout_seconds,
+        )
+        self._last_agent_result = result
+        ok = await self._handle_execution_result(
+            result,
+            task=task,
+            success_message=success_message,
+            blocked_message=blocked_message,
+            instruction=instruction,
+            is_refactor=is_refactor,
+        )
+        return result, ok
 
     async def _handle_execution_result(
         self,
@@ -343,18 +370,11 @@ class Factory:
             description=self.config.refactor_prompt,
         )
         logger.info("Backlog empty; running refactoring pass.")
-        self._last_task = refactor_task
-        result = await self.agent.run_task(
+        await self._run_agent(
             refactor_task,
-            RepoContext(repo_path=self.config.repo, branch=self.config.branch),
-        )
-        self._last_agent_result = result
-        await self._handle_execution_result(
-            result,
-            task=refactor_task,
+            instruction=self.config.refactor_prompt,
             success_message="factory: refactoring pass",
             blocked_message="factory: refactoring pass [partial]",
-            instruction=self.config.refactor_prompt,
             is_refactor=True,
         )
 

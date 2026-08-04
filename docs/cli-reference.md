@@ -93,7 +93,7 @@ last outcome: task
 - `backlog` — per-status task counts.
 - `next` — the oldest `OPEN` task (the one the factory will pick next).
 - `daemon` — whether the per-factory lock is currently held.
-- `last outcome` — the most recent `Run finished: …` line from the log.
+- `last outcome` — the most recent run recorded in `runs.jsonl`.
 
 ## `factory stop`
 
@@ -118,9 +118,7 @@ Stop the daemon when running, then start it again **in the background**
 | `--config <file>` | Factory YAML file (default `factory.yaml`). |
 | `--timeout <seconds>` | How long to wait for the old daemon to exit (default `600`). |
 
-The daemon reads `factory.yaml` **only at startup**, so after editing the
-config use `factory restart` — it re-reads the file. On success it prints the
-new daemon PID and interval.
+On success it prints the new daemon PID and interval.
 
 ## Process checks
 

@@ -44,7 +44,7 @@ from rich.prompt import Confirm
 
 from factory import __version__
 from factory.agent import DockerSandboxAgent, SandboxUnavailableError, ShellAgent
-from factory.backlog import JSONBacklog
+from factory.backlog import JSONBacklog, oldest_open_task
 from factory.config import load_config
 from factory.daemon import FactoryDaemon, acquire_run_lock, is_lock_held, read_lock_pid
 from factory.factory import Factory
@@ -53,8 +53,6 @@ from factory.models import FactoryConfig, SandboxMode, Task, TaskStatus
 from factory.runs import RunRecorder, runs_path_for
 from factory.server import WebServer
 from factory.setup import run_setup
-
-OUTCOME_MARKER = "Run finished: "
 
 DEFAULT_CONFIG = Path("factory.yaml")
 
@@ -341,7 +339,6 @@ def cmd_once(args: argparse.Namespace) -> int:
 
     async def _run_once() -> None:
         outcome = await factory.run_cycle()
-        logging.getLogger("factory.cli").info("Run finished: %s", outcome)
         console.print(f"[green]Cycle finished: {outcome}[/green]")
 
     try:
@@ -371,30 +368,6 @@ def backlog_status_counts(tasks: list[Task]) -> dict[str, int]:
     return counts
 
 
-def next_open_task(tasks: list[Task]) -> Task | None:
-    """Return the oldest OPEN task, or ``None`` when there is none."""
-    open_tasks = [task for task in tasks if task.status is TaskStatus.OPEN]
-    if not open_tasks:
-        return None
-    return min(open_tasks, key=lambda task: task.created_at)
-
-
-def last_outcome_from_log(log_file: str | Path) -> str | None:
-    """Return the last ``Run finished: …`` outcome from the log, if any."""
-    path = Path(log_file)
-    if not path.exists():
-        return None
-    try:
-        text = path.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return None
-    outcome: str | None = None
-    for line in text.splitlines():
-        if OUTCOME_MARKER in line:
-            outcome = line.rsplit(OUTCOME_MARKER, 1)[-1].strip() or None
-    return outcome
-
-
 def last_outcome_from_runs(config: FactoryConfig) -> str | None:
     """Return the last run's outcome from ``runs.jsonl``, or ``None``.
 
@@ -417,7 +390,7 @@ def render_status(
     """Render the human-readable status summary as plain text."""
     counts = backlog_status_counts(tasks)
     count_text = " ".join(f"{status}={counts[status]}" for status in counts)
-    nxt = next_open_task(tasks)
+    nxt = oldest_open_task(tasks)
     next_text = f"{nxt.id} — {nxt.title}" if nxt is not None else "(none)"
     daemon_text = "running" if daemon_running else "not running"
     outcome_text = last_outcome if last_outcome is not None else "(none)"
@@ -435,12 +408,19 @@ def render_status(
     )
 
 
+def _load_config_or_error(config_path: Path) -> FactoryConfig | None:
+    """Load an existing config; prints an error and returns None when missing."""
+    if not config_path.exists():
+        console.print(f"[red]Config file not found: {config_path}[/red]")
+        return None
+    return load_config(config_path)
+
+
 def cmd_status(args: argparse.Namespace) -> int:
     """Handle ``factory status``: read-only summary; never starts an agent."""
-    if not args.config.exists():
-        console.print(f"[red]Config file not found: {args.config}[/red]")
+    config = _load_config_or_error(args.config)
+    if config is None:
         return 1
-    config = load_config(args.config)
     tasks = asyncio.run(JSONBacklog(config.backlog).list_tasks())
     daemon_running = is_lock_held(config.backlog.with_suffix(".lock"))
     last_outcome = last_outcome_from_runs(config)
@@ -453,14 +433,6 @@ def cmd_status(args: argparse.Namespace) -> int:
         )
     )
     return 0
-
-
-def _load_config_or_error(config_path: Path) -> FactoryConfig | None:
-    """Load an existing config; prints an error and returns None when missing."""
-    if not config_path.exists():
-        console.print(f"[red]Config file not found: {config_path}[/red]")
-        return None
-    return load_config(config_path)
 
 
 def _wait_for_lock_release(lock_path: Path, timeout: float) -> bool:

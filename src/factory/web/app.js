@@ -15,8 +15,6 @@
   var metaNext = document.getElementById("meta-next");
   var metaOutcome = document.getElementById("meta-outcome");
 
-  var daemonDown = false;
-
   function el(tag, className, text) {
     var node = document.createElement(tag);
     if (className) node.className = className;
@@ -137,7 +135,6 @@
   }
 
   function setDaemonDown(down) {
-    daemonDown = down;
     noticeEl.hidden = !down;
     fetchTimeEl.parentElement.dataset.stale = down ? "true" : "false";
   }

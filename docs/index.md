@@ -67,25 +67,22 @@ factory.yaml ──► factory start (daemon)
 
 ### One cycle, in detail
 
-1. The daemon acquires a per-factory lock (`backlog.lock`); a second `start` or
+1. The daemon takes the per-factory lock (`backlog.lock`); a second `start` or
    `once` is refused while it is held.
 2. `Factory.run_cycle()` ensures the configured branch exists and is checked
    out.
 3. If any task is `BLOCKED`, the factory rewrites `BLOCKER.md` and pauses
    (`blocked` outcome) — it will not start new work until the human resolves
    the block.
-4. Otherwise it fetches the oldest `OPEN` task. If the working tree is dirty
-   the cycle aborts (`dirty`) rather than running over manual changes.
+4. Otherwise it takes the oldest `OPEN` task. If the working tree is dirty the
+   cycle aborts (`dirty`) rather than running over manual changes.
 5. The agent runs with the repository as its working directory and the task in
-   `FACTORY_TASK`.
-6. The exit code decides the outcome: `0` = commit & push (task becomes
-   `COMPLETED`); `blocked_exit_code` = commit partial work, write `BLOCKER.md`,
-   notify (task becomes `BLOCKED`); anything else = discard changes, log the
-   error (task becomes `FAILED`).
-7. With no `OPEN` task and no blocker file, the agent runs in refactoring mode
+   `FACTORY_TASK`. The exit code decides what happens to the work — see
+   [Agent contract](agent-contract.md) for the exact mapping.
+6. With no `OPEN` task and no blocker file, the agent runs in refactoring mode
    and its changes are committed the same way.
-8. The daemon sleeps until the next interval. If a previous run is still in
-   progress when it wakes, that iteration is skipped.
+7. The daemon sleeps until the next interval. A wake-up that finds a run still
+   in progress is skipped, never killed.
 
 ## Where state lives
 

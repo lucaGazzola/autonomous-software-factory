@@ -8,9 +8,25 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from factory.backlog import JSONBacklog
+from factory.backlog import JSONBacklog, oldest_open_task
 from factory.models import Task, TaskStatus
 from tests.conftest import make_task
+
+
+def test_oldest_open_task_picks_oldest():
+    older = make_task(
+        id="OLD",
+        title="Older",
+        created_at=datetime.now(UTC) - timedelta(hours=2),
+    )
+    newer = make_task(id="NEW", title="Newer", created_at=datetime.now(UTC))
+    done = make_task(id="DONE", status=TaskStatus.COMPLETED)
+    assert oldest_open_task([newer, done, older]) is older
+
+
+def test_oldest_open_task_none_when_empty_or_no_open():
+    assert oldest_open_task([]) is None
+    assert oldest_open_task([make_task(status=TaskStatus.COMPLETED)]) is None
 
 
 async def test_fetch_oldest_open_task(tmp_path):
