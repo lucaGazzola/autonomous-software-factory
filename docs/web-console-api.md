@@ -11,6 +11,8 @@ reachable from your local network (open the port in your firewall too).
 - Everything is read-only: the API never modifies the backlog, the repository,
   or the daemon.
 
+![Forgeo web console](img/console.png)
+
 The API is served by `factory.server` using the standard library; any static
 files placed in `src/factory/web/` are served at `/` so the same server can
 host a small dashboard.

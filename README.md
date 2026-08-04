@@ -114,7 +114,10 @@ factory restart   # re-read factory.yaml after editing it
 
 `factory start` runs in the foreground (Ctrl-C to stop) and serves a local
 dashboard at <http://127.0.0.1:8787> while it runs (bind to `0.0.0.0` via
-`web_host` in `factory.yaml` to reach it from other hosts on your LAN).
+`web_host` in `factory.yaml` to reach it from other hosts on your LAN):
+
+![Forgeo web console](docs/img/console.png)
+
 Everything is stored in plain files: the backlog, `factory.log`, and
 `BLOCKER.md` whenever a decision is pending. Every command is detailed in the
 [CLI reference](docs/cli-reference.md).
