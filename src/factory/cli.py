@@ -255,26 +255,40 @@ def _make_factory(config: FactoryConfig) -> Factory:
     )
 
 
-def cmd_start(args: argparse.Namespace) -> int:
-    """Handle ``factory start``: the persistent scheduled worker."""
+def _prepare_worker(
+    args: argparse.Namespace,
+) -> tuple[FactoryConfig, Factory, Any] | None:
+    """Resolve the config, take the run lock, and build the factory.
+
+    Shared by ``start`` and ``once``. Returns ``None`` (after printing an
+    error) when any step fails; on success the caller owns the lock and must
+    close it.
+    """
     config = _resolve_config(args)
     if config is None:
-        return 1
-
+        return None
     setup_logging(config.log_file)
     log = logging.getLogger("factory.cli")
     log.info("Loading factory config from %s", args.config)
-
     lock = _acquire_run_lock(config)
     if lock is None:
-        return 1
-
+        return None
     try:
         factory = _make_factory(config)
     except SandboxUnavailableError as exc:
+        lock.close()
         console.print(f"[red]{exc}[/red]")
         log.error("Sandbox unavailable: %s", exc)
+        return None
+    return config, factory, lock
+
+
+def cmd_start(args: argparse.Namespace) -> int:
+    """Handle ``factory start``: the persistent scheduled worker."""
+    prepared = _prepare_worker(args)
+    if prepared is None:
         return 1
+    config, factory, lock = prepared
 
     async def _serve() -> None:
         daemon = FactoryDaemon(config, factory)
@@ -314,35 +328,20 @@ def cmd_start(args: argparse.Namespace) -> int:
     except KeyboardInterrupt:
         pass
     finally:
-        if lock is not None:
-            lock.close()
+        lock.close()
     return 0
 
 
 def cmd_once(args: argparse.Namespace) -> int:
     """Handle ``factory once``: run exactly one cycle and exit."""
-    config = _resolve_config(args)
-    if config is None:
+    prepared = _prepare_worker(args)
+    if prepared is None:
         return 1
-
-    setup_logging(config.log_file)
-    log = logging.getLogger("factory.cli")
-    log.info("Loading factory config from %s", args.config)
-
-    lock = _acquire_run_lock(config)
-    if lock is None:
-        return 1
-
-    try:
-        factory = _make_factory(config)
-    except SandboxUnavailableError as exc:
-        console.print(f"[red]{exc}[/red]")
-        log.error("Sandbox unavailable: %s", exc)
-        return 1
+    _config, factory, lock = prepared
 
     async def _run_once() -> None:
         outcome = await factory.run_cycle()
-        log.info("Run finished: %s", outcome)
+        logging.getLogger("factory.cli").info("Run finished: %s", outcome)
         console.print(f"[green]Cycle finished: {outcome}[/green]")
 
     try:

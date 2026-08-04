@@ -116,6 +116,17 @@ class Task(BaseModel):
     agent_command: str | list[str] | None = Field(default=None)
     agent_timeout_seconds: float | None = Field(default=None, gt=0)
 
+    @property
+    def instruction(self) -> str:
+        """The full instruction handed to the agent for this task."""
+        lines = [self.title, ""]
+        if self.description:
+            lines.append(self.description)
+        if self.acceptance_criteria:
+            lines.append("Acceptance criteria:")
+            lines.extend(f"- {criterion}" for criterion in self.acceptance_criteria)
+        return "\n".join(lines)
+
     @field_validator("agent_command")
     @classmethod
     def _command_not_blank(cls, value: str | list[str] | None) -> str | list[str] | None:
@@ -239,10 +250,3 @@ class FactoryConfig(BaseModel):
         if self.agent_sandbox is SandboxMode.DOCKER and not (self.agent_sandbox_image or "").strip():
             raise ValueError("agent_sandbox_image is required when agent_sandbox is 'docker'")
         return self
-
-    @property
-    def blocked_command(self) -> str:
-        """The agent command as a plain string (``argv list`` joined)."""
-        if isinstance(self.agent_command, list):
-            return " ".join(self.agent_command)
-        return self.agent_command

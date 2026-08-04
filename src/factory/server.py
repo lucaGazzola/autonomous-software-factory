@@ -65,6 +65,18 @@ def _tail_lines(path: Path, n: int) -> list[str]:
     return lines[-n:]
 
 
+def _clamp_query_int(
+    query: dict[str, list[str]], key: str, default: int, maximum: int
+) -> int:
+    """Parse a bounded non-negative integer from a query parameter."""
+    raw = query.get(key, [str(default)])[0]
+    try:
+        value = int(raw)
+    except ValueError:
+        value = default
+    return max(0, min(value, maximum))
+
+
 def _safe_static_path(url_path: str) -> Path | None:
     """Resolve a URL path under :data:`WEB_ROOT`, rejecting traversal."""
     rel = unquote(url_path).lstrip("/")
@@ -141,22 +153,12 @@ def make_handler(state: ApiState) -> type[BaseHTTPRequestHandler]:
                     self._send_json(200, state.config.model_dump(mode="json"))
                     return
                 if path == "/api/logs":
-                    raw = query.get("lines", [str(DEFAULT_LOG_LINES)])[0]
-                    try:
-                        n = int(raw)
-                    except ValueError:
-                        n = DEFAULT_LOG_LINES
-                    n = max(0, min(n, MAX_LOG_LINES))
+                    n = _clamp_query_int(query, "lines", DEFAULT_LOG_LINES, MAX_LOG_LINES)
                     lines = _tail_lines(Path(state.config.log_file), n)
                     self._send_json(200, {"lines": lines})
                     return
                 if path == "/api/runs":
-                    raw = query.get("limit", [str(DEFAULT_RUN_LIMIT)])[0]
-                    try:
-                        n = int(raw)
-                    except ValueError:
-                        n = DEFAULT_RUN_LIMIT
-                    n = max(0, min(n, MAX_RUN_LIMIT))
+                    n = _clamp_query_int(query, "limit", DEFAULT_RUN_LIMIT, MAX_RUN_LIMIT)
                     records = RunRecorder(runs_path_for(state.backlog.path)).read(limit=n)
                     self._send_json(200, [r.model_dump(mode="json") for r in records])
                     return

@@ -23,8 +23,6 @@ from factory.models import Task, TaskStatus
 
 logger = logging.getLogger(__name__)
 
-_EMPTY_STORE: dict[str, Any] = {"tasks": []}
-
 
 class JSONBacklog:
     """A backlog stored in a single JSON document on disk."""

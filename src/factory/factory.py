@@ -110,7 +110,7 @@ class Factory:
                             status=ExecutionStatus.BLOCKED,
                             questions=[f"Task {task.id} is blocked; see the backlog."],
                         ),
-                        instruction=self._task_instruction(task),
+                        instruction=task.instruction,
                     )
                     for task in blocked
                 ]
@@ -223,7 +223,7 @@ class Factory:
             task=task,
             success_message=f"factory: {task.title} (#{task.id})",
             blocked_message=f"factory: {task.title} (#{task.id}) [partial]",
-            instruction=self._task_instruction(task),
+            instruction=task.instruction,
         )
 
         if result.status is ExecutionStatus.SUCCESS and ok:
@@ -298,13 +298,9 @@ class Factory:
         else:
             logger.error("Task %s FAILED: %s", task.id, detail)
 
-    async def _fail(self, task: Task, result: ExecutionResult, *, discard_work: bool) -> None:
+    async def _fail(self, task: Task, result: ExecutionResult) -> None:
         """Discard the agent's work, mark the task FAILED, and log the error."""
-        if discard_work:
-            await self._discard_failed_work(task, result)
-        else:
-            detail = result.error or "no error detail provided"
-            logger.error("Task %s FAILED: %s", task.id, detail)
+        await self._discard_failed_work(task, result)
         await self.backlog.update_status(task.id, TaskStatus.FAILED)
 
     async def _commit_and_push(self, message: str, *, task: Task) -> bool:
@@ -320,7 +316,6 @@ class Factory:
             await self._fail(
                 task,
                 ExecutionResult(status=ExecutionStatus.ERROR, error=f"git: {exc}"),
-                discard_work=True,
             )
             return False
         if sha is None:
@@ -366,16 +361,6 @@ class Factory:
     # ------------------------------------------------------------------ #
     # Blocker file                                                        #
     # ------------------------------------------------------------------ #
-
-    def _task_instruction(self, task: Task) -> str:
-        """The instruction the agent was given for ``task``."""
-        lines = [f"{task.title}"]
-        if task.description:
-            lines.append(task.description)
-        if task.acceptance_criteria:
-            lines.append("Acceptance criteria:")
-            lines.extend(f"- {criterion}" for criterion in task.acceptance_criteria)
-        return "\n".join(lines)
 
     def _notify_blocked(self, entry: BlockerEntry) -> None:
         """Send a Telegram notification for a newly blocked task or refactor pass.

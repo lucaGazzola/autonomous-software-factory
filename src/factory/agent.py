@@ -75,16 +75,6 @@ class ShellAgent(BaseAgent):
         self.env = dict(env or {})
         self.blocked_exit_code = blocked_exit_code
 
-    def _task_instruction(self, task: Task) -> str:
-        """The full instruction handed to the agent via ``FACTORY_TASK``."""
-        lines = [task.title, ""]
-        if task.description:
-            lines.append(task.description)
-        if task.acceptance_criteria:
-            lines.append("Acceptance criteria:")
-            lines.extend(f"- {criterion}" for criterion in task.acceptance_criteria)
-        return "\n".join(lines)
-
     @staticmethod
     async def _drain_stream(
         stream: asyncio.StreamReader | None,
@@ -148,7 +138,7 @@ class ShellAgent(BaseAgent):
         env = {
             **os.environ,
             **self.env,
-            "FACTORY_TASK": self._task_instruction(task),
+            "FACTORY_TASK": task.instruction,
             "FACTORY_REPO": str(context.repo_path),
             "FACTORY_BRANCH": context.branch,
         }
