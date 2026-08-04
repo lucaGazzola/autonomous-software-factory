@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "forgeo"
-version = "0.1.0"
+version = "0.2.0"
 description = "A scheduled software factory: executes backlog tasks on main, refactors when idle, and writes BLOCKER.md when it needs human input."
 readme = "README.md"
 requires-python = ">=3.11"

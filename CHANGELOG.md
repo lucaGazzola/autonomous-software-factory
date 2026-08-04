@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-04
+
 ### Added
 
 - `CHANGELOG.md` in Keep a Changelog format, with the `0.1.0` history
@@ -18,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   HTML/CSS/JS dashboard (no framework, no build step, no external assets)
   served at `/` showing the backlog grouped by status and daemon status,
   auto-refreshing every 30 seconds.
+- `install.sh` is now hosted on the project's own server and served from
+  <https://forgeo.org/install.sh>; README and docs use it in the one-liner.
 
 ## [0.1.0] - 2026-08-03
 
@@ -57,5 +61,6 @@ Initial release of the scheduled, agent-driven software factory.
   overlapping-run skipping.
 - Dogfooding docs removed; local configs kept out of the repository.
 
-[Unreleased]: https://github.com/lucaGazzola/forgeo/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/lucaGazzola/forgeo/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/lucaGazzola/forgeo/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/lucaGazzola/forgeo/releases/tag/v0.1.0
