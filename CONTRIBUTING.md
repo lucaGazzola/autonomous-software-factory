@@ -76,6 +76,31 @@ Human contributions use the normal GitHub flow:
 7. Once approved and green, merge. Follow-up work is welcome as a new PR or as
    a backlog task for the factory.
 
+## Releasing
+
+Releases are cut from `main` and published as GitHub Releases. Tagging the
+repo triggers CI, which builds the wheel and sdist and attaches them to the
+release — there is no PyPI publishing yet, and `install.sh` installs directly
+from git.
+
+1. Confirm the [quality gates](#quality-gates) are green on `main`.
+2. Bump the version in `pyproject.toml` (`version = "x.y.z"`), following
+   [Semantic Versioning](https://semver.org/).
+3. Update `CHANGELOG.md`: move the entries from `## [Unreleased]` under a new
+   `## [x.y.z] - <date>` section, add the compare links at the bottom, and
+   leave a fresh `## [Unreleased]` heading.
+4. Commit the bump and changelog update, e.g. `git commit -m "Release x.y.z"`.
+5. Tag and push the tag — the `release` job in `.github/workflows/ci.yml`
+   builds the wheel and sdist and attaches them to a GitHub Release:
+
+   ```bash
+   git tag vx.y.z
+   git push origin vx.y.z
+   ```
+
+6. Confirm the release and its artifacts are listed under
+   <https://github.com/lucaGazzola/forgeo/releases>.
+
 ## License
 
 This project is MIT-licensed; see [LICENSE](LICENSE).
