@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import urllib.error
 import urllib.request
 from datetime import UTC, datetime
@@ -292,6 +293,32 @@ def test_binds_localhost_only(running_server):
 
 def test_web_root_exists():
     assert WEB_ROOT.is_dir()
+
+
+def test_web_root_serves_index(running_server):
+    server, _config, _backlog = running_server
+    status, body = _get(f"http://127.0.0.1:{server.port}/")
+    assert status == 200
+    assert isinstance(body, str)
+    assert "<!doctype html" in body.lower()
+    assert 'href="style.css"' in body
+    assert 'src="app.js"' in body
+
+
+def test_web_root_index_is_html(running_server):
+    server, _config, _backlog = running_server
+    with urllib.request.urlopen(f"http://127.0.0.1:{server.port}/", timeout=5) as resp:
+        assert resp.headers.get_content_type() == "text/html"
+
+
+def test_web_root_index_references_existing_assets():
+    html = (WEB_ROOT / "index.html").read_text(encoding="utf-8")
+    referenced = re.findall(r'(?:href|src)="([^"]+\.(?:css|js))"', html)
+    assert referenced
+    for asset in referenced:
+        assert (WEB_ROOT / asset).is_file(), f"missing asset referenced by index.html: {asset}"
+    for asset in ("index.html", "style.css", "app.js"):
+        assert (WEB_ROOT / asset).is_file(), f"missing web asset: {asset}"
 
 
 def test_config_defaults_include_web_port():

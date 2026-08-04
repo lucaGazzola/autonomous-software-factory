@@ -101,8 +101,20 @@ curl http://127.0.0.1:8787/api/blocker
 ## Static files
 
 Any other path is served from `src/factory/web/` (a path traversal attempt is
-rejected and returns `404`). This is where a web console UI would live; the
-directory ships empty.
+rejected and returns `404`). The web console UI lives there:
+
+- `index.html` — the dashboard page: a header with the factory name, pid,
+  interval, next run, and last outcome (from `/api/status`), the backlog as a
+  card list grouped under **OPEN / BLOCKED / COMPLETED / FAILED** headings
+  (id, title, description, created/updated timestamps), and a footer with the
+  fetch time.
+- `style.css` — dark theme, single accent color, system fonts only.
+- `app.js` — fetches `/api/tasks` and `/api/status`, re-renders in place every
+  30 seconds (never a full page reload), shows an empty state when the backlog
+  has no tasks, and a discreet notice when the daemon is unreachable.
+
+The page is fully self-contained: plain HTML/CSS/JS, no framework, no build
+step, no external assets or CDNs. It is served at `/` as `text/html`.
 
 ## Errors
 

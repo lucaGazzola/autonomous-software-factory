@@ -56,7 +56,10 @@ oldest `OPEN` task, or a refactoring pass when the backlog is empty). It runs
 in the foreground — interrupt it with Ctrl-C, or stop it from another
 terminal with `factory stop`. Logs go to `factory.log` (rotating: 5 MB × 3),
 and a local web dashboard is served at <http://127.0.0.1:8787> (disable it
-with `web_port: 0` in the config).
+with `web_port: 0` in the config). The dashboard is a self-contained
+HTML/CSS/JS page in `src/factory/web/` that shows the backlog grouped by
+status plus daemon status, and auto-refreshes every 30 seconds (see
+[`docs/web-console-api.md`](docs/web-console-api.md)).
 
 ### Run a single cycle
 

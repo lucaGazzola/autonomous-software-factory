@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Tag-triggered CI job that builds the wheel and sdist and attaches them to a
   GitHub Release.
 - Release steps documented in `CONTRIBUTING.md`.
+- Web console frontend in `src/factory/web/`: a self-contained
+  HTML/CSS/JS dashboard (no framework, no build step, no external assets)
+  served at `/` showing the backlog grouped by status and daemon status,
+  auto-refreshing every 30 seconds.
 
 ## [0.1.0] - 2026-08-03
 
