@@ -2,7 +2,7 @@
 #
 # Install the `factory` CLI from the public GitHub remote.
 #
-#   curl -fsSL https://raw.githubusercontent.com/lucaGazzola/forgeo/main/install.sh | bash
+#   curl -fsSL https://forgeo.org/install.sh | bash
 #
 # Prefers pipx, falls back to `pip install --user`. Never requires root.
 # Re-running the script upgrades the existing install (pipx --force / pip --upgrade).

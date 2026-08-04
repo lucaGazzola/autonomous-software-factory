@@ -9,7 +9,7 @@ Requires **Python 3.11+**. Install the `factory` CLI from the public GitHub
 remote with the one-liner:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/lucaGazzola/forgeo/main/install.sh | bash
+curl -fsSL https://forgeo.org/install.sh | bash
 ```
 
 The installer:
