@@ -165,19 +165,21 @@ class Factory:
             return RunKind.REFACTOR
         return None
 
-    def _run_task_id(self, outcome: str) -> str | None:
+    def _cycle_task(self, outcome: str) -> Task | None:
+        """The task a finished cycle ran, when there is one to record."""
         if outcome in ("task", "refactor"):
-            return self._last_task.id if self._last_task is not None else None
+            return self._last_task
         if outcome == "blocked":
-            return self._blocked_tasks[0].id if self._blocked_tasks else None
+            return self._blocked_tasks[0] if self._blocked_tasks else None
         return None
 
+    def _run_task_id(self, outcome: str) -> str | None:
+        task = self._cycle_task(outcome)
+        return task.id if task is not None else None
+
     def _run_task_title(self, outcome: str) -> str | None:
-        if outcome in ("task", "refactor"):
-            return self._last_task.title if self._last_task is not None else None
-        if outcome == "blocked":
-            return self._blocked_tasks[0].title if self._blocked_tasks else None
-        return None
+        task = self._cycle_task(outcome)
+        return task.title if task is not None else None
 
     def _run_outcome(self, outcome: str) -> RunOutcome:
         if outcome in ("task", "refactor"):

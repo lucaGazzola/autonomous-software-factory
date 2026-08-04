@@ -109,7 +109,8 @@ class JSONBacklog:
             return {"tasks": []}
         if not isinstance(data, dict):
             return {"tasks": []}
-        return {"tasks": data.get("tasks", []) if isinstance(data.get("tasks"), list) else []}
+        tasks = data.get("tasks")
+        return {"tasks": tasks if isinstance(tasks, list) else []}
 
     async def _write(self, store: dict[str, Any]) -> None:
         """Atomically persist the store (temp file + rename)."""

@@ -37,6 +37,14 @@ async def test_missing_command_is_error():
     assert result.status is ExecutionStatus.ERROR
 
 
+async def test_argv_missing_binary_is_error():
+    """An argv-list command whose binary does not exist surfaces a clear error."""
+    agent = ShellAgent(["/nonexistent/binary"])
+    result = await agent.run_task(TASK, RepoContext())
+    assert result.status is ExecutionStatus.ERROR
+    assert "command not found" in (result.error or "")
+
+
 async def test_timeout_is_error():
     agent = ShellAgent("sleep 5", timeout_seconds=0.2)
     result = await agent.run_task(TASK, RepoContext())

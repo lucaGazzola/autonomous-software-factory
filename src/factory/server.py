@@ -80,8 +80,10 @@ def _clamp_query_int(
 def _safe_static_path(url_path: str) -> Path | None:
     """Resolve a URL path under :data:`WEB_ROOT`, rejecting traversal."""
     rel = unquote(url_path).lstrip("/")
-    if not rel or rel.endswith("/"):
-        rel = (rel + "index.html") if rel else "index.html"
+    if not rel:
+        rel = "index.html"
+    elif rel.endswith("/"):
+        rel = rel + "index.html"
     root = WEB_ROOT.resolve()
     if not root.is_dir():
         return None

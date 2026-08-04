@@ -7,10 +7,10 @@ Commands:
   writes a ``factory.yaml``. Running ``factory`` or ``factory start`` without
   a config triggers it automatically.
 * ``factory start --config factory.yaml`` — run the scheduled factory on one
-   repository. Every ``interval_minutes`` it picks an ``OPEN`` task from the
-   backlog, or runs a refactoring pass when the backlog is empty; everything
-    is committed and pushed on the main branch. When the agent needs human
-    input, a detailed ``BLOCKER.md`` file is written with what you must do.
+  repository. Every ``interval_minutes`` it picks an ``OPEN`` task from the
+  backlog, or runs a refactoring pass when the backlog is empty; everything
+  is committed and pushed on the main branch. When the agent needs human
+  input, a detailed ``BLOCKER.md`` file is written with what you must do.
 * ``factory once --config factory.yaml`` — run exactly one cycle and exit.
    Shares the per-factory lock with the daemon, so it never overlaps a
    running ``start``.
@@ -34,6 +34,7 @@ import subprocess
 import sys
 import time
 from collections import Counter
+from collections.abc import Callable
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any
@@ -531,26 +532,27 @@ def cmd_default() -> int:
     return cmd_init(argparse.Namespace(config=DEFAULT_CONFIG, force=False))
 
 
+_COMMANDS: dict[str, Callable[[argparse.Namespace], int]] = {
+    "start": cmd_start,
+    "once": cmd_once,
+    "init": cmd_init,
+    "status": cmd_status,
+    "stop": cmd_stop,
+    "restart": cmd_restart,
+}
+
+
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point used by both ``factory`` and ``python -m factory``."""
     parser = build_parser()
     args = parser.parse_args(argv)
     if args.action is None:
         return cmd_default()
-    if args.action == "start":
-        return cmd_start(args)
-    if args.action == "once":
-        return cmd_once(args)
-    if args.action == "init":
-        return cmd_init(args)
-    if args.action == "status":
-        return cmd_status(args)
-    if args.action == "stop":
-        return cmd_stop(args)
-    if args.action == "restart":
-        return cmd_restart(args)
-    parser.error(f"unknown command: {args.action}")
-    return 2
+    command = _COMMANDS.get(args.action)
+    if command is None:
+        parser.error(f"unknown command: {args.action}")
+        return 2
+    return command(args)
 
 
 if __name__ == "__main__":
