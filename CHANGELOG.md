@@ -7,11 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-08-05
+
 ### Added
 
 - `web_host` config option: the web dashboard/API bind address. Default
   `127.0.0.1` (unchanged behavior); set `0.0.0.0` to reach it from other
   hosts on the local network.
+- `install.sh` now prefers a prebuilt standalone binary downloaded from the
+  matching GitHub Release for the host OS/arch — **no Python required**.
+  The pipx/pip fallback remains, used only when no prebuilt binary matches
+  the platform and a Python >= 3.11 is available.
+- Tag-triggered CI builds single-file executables with PyInstaller on
+  Linux (amd64), macOS (amd64/arm64), and Windows (amd64) and attaches them
+  to the GitHub Release (`forgeo.spec`).
+- Installer tests cover the binary-download path and the pipx/pip fallback
+  with stubs (no network).
 
 ## [0.2.0] - 2026-08-04
 
@@ -67,6 +78,7 @@ Initial release of the scheduled, agent-driven software factory.
   overlapping-run skipping.
 - Dogfooding docs removed; local configs kept out of the repository.
 
-[Unreleased]: https://github.com/lucaGazzola/forgeo/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/lucaGazzola/forgeo/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/lucaGazzola/forgeo/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/lucaGazzola/forgeo/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/lucaGazzola/forgeo/releases/tag/v0.1.0

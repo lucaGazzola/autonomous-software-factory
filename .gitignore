@@ -22,6 +22,10 @@ htmlcov/
 # Docs build output
 site/
 
+# Build artifacts
+build/
+dist/
+
 # AI assistant context
 CONTEXT.md
 

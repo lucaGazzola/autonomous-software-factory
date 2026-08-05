@@ -21,7 +21,8 @@ genuinely yours to make — everything else happens autonomously.
 
 ## Quickstart
 
-Requires Python 3.11+ and a git repository. The full walkthrough is in
+Requires a git repository (no Python needed — the one-liner downloads a
+prebuilt binary for your OS). The full walkthrough is in
 [Getting started](docs/getting-started.md).
 
 ```bash

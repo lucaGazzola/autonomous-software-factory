@@ -28,8 +28,51 @@ jobs:
       - name: Test with pytest
         run: python -m pytest
 
+  build-binaries:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            asset: factory-linux-amd64
+            binary: dist/factory
+          - os: macos-15-intel
+            asset: factory-darwin-amd64
+            binary: dist/factory
+          - os: macos-latest
+            asset: factory-darwin-arm64
+            binary: dist/factory
+          - os: windows-latest
+            asset: factory-windows-amd64.exe
+            binary: dist/factory.exe
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install package and PyInstaller
+        run: python -m pip install --upgrade pip pyinstaller .
+      - name: Build standalone binary
+        run: pyinstaller forgeo.spec
+      - name: Rename binary to release asset name
+        shell: bash
+        run: |
+          mkdir -p release-assets
+          cp "${{ matrix.binary }}" "release-assets/${{ matrix.asset }}"
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: release-assets/${{ matrix.asset }}
+          if-no-files-found: error
+
   release:
     if: startsWith(github.ref, 'refs/tags/v')
+    needs: build-binaries
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -42,9 +85,15 @@ jobs:
         run: python -m pip install --upgrade build
       - name: Build wheel and sdist
         run: python -m build
+      - name: Download binary artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: binaries
+          merge-multiple: true
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
             dist/*.whl
             dist/*.tar.gz
+            binaries/*

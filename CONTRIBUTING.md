@@ -79,26 +79,40 @@ Human contributions use the normal GitHub flow:
 ## Releasing
 
 Releases are cut from `main` and published as GitHub Releases. Tagging the
-repo triggers CI, which builds the wheel and sdist and attaches them to the
-release — there is no PyPI publishing yet, and `install.sh` installs directly
-from git.
+repo triggers CI, which builds the wheel, sdist, **and prebuilt standalone
+binaries** and attaches them to the release — there is no PyPI publishing yet,
+and `install.sh` downloads the matching prebuilt binary from the release
+(`pipx`/`pip` fallback only when no binary matches the platform).
+
+> Patch and minor releases **must** include the built binaries, otherwise the
+> `install.sh` binary path (the default, no-Python install) breaks. The CI
+> `build-binaries` job builds them automatically on any `v*` tag, but make
+> sure the release actually carries them — the `factory-<os>-<arch>` assets
+> listed below are what the installer downloads.
 
 1. Confirm the [quality gates](#quality-gates) are green on `main`.
-2. Bump the version in `pyproject.toml` (`version = "x.y.z"`), following
+2. Bump the version in `pyproject.toml` (`version = "x.y.z"`) and in
+   `src/factory/__init__.py`, following
    [Semantic Versioning](https://semver.org/).
-3. Update `CHANGELOG.md`: move the entries from `## [Unreleased]` under a new
+3. Update the `VERSION=` at the top of `install.sh` to the new `x.y.z` so the
+   installer downloads the new release's binaries.
+4. Update `CHANGELOG.md`: move the entries from `## [Unreleased]` under a new
    `## [x.y.z] - <date>` section, add the compare links at the bottom, and
    leave a fresh `## [Unreleased]` heading.
-4. Commit the bump and changelog update, e.g. `git commit -m "Release x.y.z"`.
-5. Tag and push the tag — the `release` job in `.github/workflows/ci.yml`
-   builds the wheel and sdist and attaches them to a GitHub Release:
+5. Commit the bump and changelog update, e.g. `git commit -m "Release x.y.z"`.
+6. Tag and push the tag — the `build-binaries` and `release` jobs in
+   `.github/workflows/ci.yml` build the wheel, sdist, and PyInstaller binaries
+   for Linux (amd64), macOS (amd64/arm64), and Windows (amd64) and attach them
+   to a GitHub Release:
 
    ```bash
    git tag vx.y.z
    git push origin vx.y.z
    ```
 
-6. Confirm the release and its artifacts are listed under
+7. Confirm the release and its artifacts (wheel, sdist, and the
+   `factory-linux-amd64`, `factory-darwin-amd64`, `factory-darwin-arm64`,
+   `factory-windows-amd64.exe` binaries) are listed under
    <https://github.com/lucaGazzola/forgeo/releases>.
 
 ## License

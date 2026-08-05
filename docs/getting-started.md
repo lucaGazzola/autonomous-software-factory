@@ -5,8 +5,8 @@ first backlog task.
 
 ## 1. Install
 
-Requires **Python 3.11+**. Install the `factory` CLI from the public GitHub
-remote with the one-liner:
+Install the `factory` CLI from the public GitHub remote with the one-liner
+(**no Python required**):
 
 ```bash
 curl -fsSL https://forgeo.org/install.sh | bash
@@ -14,13 +14,16 @@ curl -fsSL https://forgeo.org/install.sh | bash
 
 The installer:
 
-- prefers `pipx` and falls back to `pip install --user`;
+- downloads a prebuilt standalone binary from the matching GitHub Release
+  for your OS/arch (Linux, macOS, and Windows) into `~/.local/bin`;
+- falls back to `pipx` and then `pip install --user` only when no prebuilt
+  binary matches your platform and a Python 3.11+ is available;
 - never needs root;
-- re-running it upgrades the existing install (`pipx --force` /
-  `pip --upgrade`).
+- re-running it upgrades the existing install (re-downloads /
+  `pipx --force` / `pip --upgrade`).
 
-If `pipx` is not installed, it warns when the user bin directory is not on
-your `PATH` and tells you how to add it.
+If the install location is not on your `PATH`, it warns you and tells you how
+to add it.
 
 ## 2. Initialize
 
