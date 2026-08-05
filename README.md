@@ -1,8 +1,9 @@
-<p align="center">
+<div align="center">
   <img src="docs/img/logo.png" alt="Forgeo logo" width="128">
-</p>
+</div>
 
-# Forgeo
+<div style="text-align: center; font-size: 30px; font-weight: bold; color: #0F5279">Forgeo</div>
+
 
 [![CI](https://github.com/lucaGazzola/forgeo/actions/workflows/ci.yml/badge.svg)](https://github.com/lucaGazzola/forgeo/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
