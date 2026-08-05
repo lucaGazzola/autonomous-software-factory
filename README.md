@@ -3,7 +3,7 @@
 </div>
 
 <div align="center">
-  <span style="font-size: 30px; font-weight: bold; color: #085688">Forgeo</span>
+  <img src="docs/img/title.svg" alt="Forgeo" width="128">
 </div>
 
 
