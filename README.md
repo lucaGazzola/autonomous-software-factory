@@ -2,7 +2,9 @@
   <img src="docs/img/logo.png" alt="Forgeo logo" width="128">
 </div>
 
-<div style="text-align: center; font-size: 30px; font-weight: bold; color: #085688">Forgeo</div>
+<div align="center">
+  <span style="font-size: 30px; font-weight: bold; color: #085688">Forgeo</span>
+</div>
 
 
 [![CI](https://github.com/lucaGazzola/forgeo/actions/workflows/ci.yml/badge.svg)](https://github.com/lucaGazzola/forgeo/actions/workflows/ci.yml)
