@@ -31,7 +31,10 @@ static files in `src/factory/web/` are served at their URL paths.
   counts, each linking to its instance page.
 - `GET /instances/<name>/` — one instance's page: a kanban backlog, a
   **Create** tab with a form to add tasks, plus tabs for **logs**, **runs**,
-  **blocker** and **config**.
+  **blocker** and **config**. Clicking a task card opens a modal with the full
+  task details (description, acceptance criteria, dependencies, files to
+  modify, agent command, timestamps); it closes via the close button, the
+  backdrop, or Escape.
 - `GET /style.css`, `/central/central.js`, `/central/central.css` — the
   shared dark theme and dashboard scripts (no frameworks).
 
