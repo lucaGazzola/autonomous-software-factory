@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 import os
 import shutil
+import signal
 from abc import ABC, abstractmethod
 from collections import deque
 
@@ -26,6 +27,30 @@ from factory.models import ExecutionResult, ExecutionStatus, RepoContext, Task
 # Keep only the most recent process output lines so a chatty agent cannot
 # blow memory; header/footer status lines are added around this window.
 _MAX_OUTPUT_LINES = 1000
+
+# Hard cap on how long we wait for the output streams to reach EOF after the
+# process is done (or killed). Grandchildren that escaped the process group
+# (daemonized agents, docker containers) may hold the pipes open forever;
+# the factory must never hang on that.
+_DEFAULT_DRAIN_TIMEOUT_SECONDS = 30.0
+
+
+def _kill_process_group(proc: asyncio.subprocess.Process) -> None:
+    """SIGKILL the whole process group of a spawned agent.
+
+    ``proc.kill()`` only kills the direct child (for a string command, the
+    shell); the real agent often runs as a grandchild, which would survive
+    as an orphan and keep the output pipes open. The agent is spawned in its
+    own session (``start_new_session=True``), so ``proc.pid`` is its process
+    group id and killing the group reaps the entire process tree. Falls back
+    to killing just the direct child when the group is already gone.
+    """
+    try:
+        os.killpg(proc.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        proc.kill()
+    except PermissionError:
+        proc.kill()
 
 
 class SandboxUnavailableError(RuntimeError):
@@ -67,11 +92,13 @@ class ShellAgent(BaseAgent):
         command: str | list[str],
         *,
         timeout_seconds: float | None = None,
+        drain_timeout_seconds: float = _DEFAULT_DRAIN_TIMEOUT_SECONDS,
         env: dict[str, str] | None = None,
         blocked_exit_code: int = 2,
     ) -> None:
         self.command = command
         self.timeout_seconds = timeout_seconds
+        self.drain_timeout_seconds = drain_timeout_seconds
         self.env = dict(env or {})
         self.blocked_exit_code = blocked_exit_code
 
@@ -109,6 +136,7 @@ class ShellAgent(BaseAgent):
                 env=env,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
+                start_new_session=True,
             )
         return await asyncio.create_subprocess_exec(
             *command,
@@ -116,6 +144,7 @@ class ShellAgent(BaseAgent):
             env=env,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            start_new_session=True,
         )
 
     async def run_task(
@@ -164,11 +193,20 @@ class ShellAgent(BaseAgent):
             await asyncio.wait_for(proc.wait(), timeout=timeout)
         except TimeoutError:
             timed_out = True
-            proc.kill()
+            _kill_process_group(proc)
             await proc.wait()
         # Always finish draining so lines already written (and any residual
-        # after kill) are captured before we build the result.
-        await readers
+        # after kill) are captured before we build the result. Bounded: a
+        # grandchild that escaped the process group (daemonized agent, docker
+        # container) may hold the pipes open, and the factory must never hang
+        # waiting for EOF that will not come.
+        try:
+            await asyncio.wait_for(readers, timeout=self.drain_timeout_seconds)
+        except TimeoutError:
+            logs.append(
+                f"[{self.name}] Output streams stayed open beyond "
+                f"{self.drain_timeout_seconds:g}s; proceeding without them."
+            )
         logs.extend(stream_lines)
 
         if timed_out:
@@ -290,4 +328,5 @@ class DockerSandboxAgent(ShellAgent):
             env=env,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            start_new_session=True,
         )

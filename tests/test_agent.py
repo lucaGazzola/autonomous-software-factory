@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import os
+import sys
+
 import pytest
 
 from factory.agent import DockerSandboxAgent, SandboxUnavailableError, ShellAgent
@@ -62,6 +65,42 @@ async def test_timeout_includes_streamed_output():
     assert result.status is ExecutionStatus.ERROR
     assert "timed out" in (result.error or "")
     assert any("pre-timeout-marker" in line for line in result.output_logs)
+
+
+async def test_timeout_kills_whole_process_group(tmp_path):
+    """Timeout must reap the entire process tree, not just the shell.
+
+    Regression: ``proc.kill()`` killed only the direct child, orphaning
+    grandchildren (the real agent) that kept the output pipes open and hung
+    the factory forever.
+    """
+    marker = tmp_path / "sleep.pid"
+    agent = ShellAgent(
+        f"sleep 60 & echo $! > {marker}; wait",
+        timeout_seconds=0.3,
+    )
+    result = await agent.run_task(TASK, RepoContext())
+    assert result.status is ExecutionStatus.ERROR
+    assert "timed out" in (result.error or "")
+    sleep_pid = int(marker.read_text(encoding="utf-8"))
+    with pytest.raises(ProcessLookupError):
+        os.kill(sleep_pid, 0)
+
+
+async def test_timeout_does_not_hang_when_grandchild_escapes_group():
+    """A descendant that leaves the process group must not hang the factory.
+
+    The drain is bounded, so even when an escaped grandchild (daemonized
+    agent, docker container) keeps the output pipes open, the run returns.
+    """
+    agent = ShellAgent(
+        f'"{sys.executable}" -c "import os, time; os.setsid(); time.sleep(60)" & wait',
+        timeout_seconds=0.2,
+        drain_timeout_seconds=1.0,
+    )
+    result = await agent.run_task(TASK, RepoContext())
+    assert result.status is ExecutionStatus.ERROR
+    assert "timed out" in (result.error or "")
 
 
 async def test_output_log_window_is_bounded():
