@@ -1,4 +1,4 @@
-"""Helpers shared by the two read-only web servers.
+"""Helpers shared by the two web servers.
 
 The per-daemon server (:mod:`factory.server`) and the standalone central
 dashboard (:mod:`factory.central`) both speak JSON and serve static files

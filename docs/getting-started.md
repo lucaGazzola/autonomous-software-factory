@@ -53,7 +53,8 @@ factory init --force    # overwrite an existing factory.yaml
 
 The backlog is a plain JSON file (see [Backlog format](backlog.md)). Create
 the file configured as `backlog:` in your `factory.yaml` — by default
-`.factory/backlog.json`:
+`.factory/backlog.json`. Once the factory is running you can also add tasks
+from the [web console](web-console-api.md) — no file editing needed:
 
 ```json
 {

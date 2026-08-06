@@ -45,8 +45,9 @@ factory start   # run forever: every interval_minutes, implement the oldest OPEN
 
 `factory init` writes `factory.yaml` and a `.factory/` folder for the backlog
 and logs, gitignored for you. Fill the backlog with plain JSON tasks (see
-[Backlog format](docs/backlog.md)) and the factory does the rest — serving a
-local dashboard at <http://127.0.0.1:8787> while it runs:
+[Backlog format](docs/backlog.md)) — or add them from the web console while
+it runs — and the factory does the rest, serving a local dashboard at
+<http://127.0.0.1:8787>:
 
 ![Forgeo web console](docs/img/console.png)
 

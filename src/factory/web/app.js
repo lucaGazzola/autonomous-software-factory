@@ -15,6 +15,14 @@
   var metaNext = document.getElementById("meta-next");
   var metaOutcome = document.getElementById("meta-outcome");
 
+  var form = document.getElementById("new-task");
+  var formError = document.getElementById("new-task-error");
+  var titleInput = document.getElementById("task-title");
+  var descInput = document.getElementById("task-description");
+  var acceptanceInput = document.getElementById("task-acceptance");
+
+  var tasksCache = [];
+
   function el(tag, className, text) {
     var node = document.createElement(tag);
     if (className) node.className = className;
@@ -159,6 +167,7 @@
       .then(function (results) {
         var tasks = results[0] || [];
         var status = results[1] || {};
+        tasksCache = tasks;
         renderTasks(tasks);
         renderStatus(status);
         setDaemonDown(false);
@@ -169,7 +178,60 @@
       });
   }
 
+  function showFormError(message) {
+    formError.textContent = message;
+    formError.hidden = false;
+  }
+
+  function createTask(event) {
+    event.preventDefault();
+    formError.hidden = true;
+
+    var title = titleInput.value.trim();
+    if (!title) {
+      showFormError("Title is required.");
+      return;
+    }
+    var payload = { title: title };
+    var description = descInput.value.trim();
+    if (description) payload.description = description;
+    var criteria = acceptanceInput.value
+      .split(",")
+      .map(function (s) { return s.trim(); })
+      .filter(Boolean);
+    if (criteria.length) payload.acceptance_criteria = criteria;
+
+    var controller = typeof AbortController === "function" ? new AbortController() : null;
+    var timer = controller ? setTimeout(function () { controller.abort(); }, TIMEOUT_MS) : null;
+    fetch("api/tasks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal: controller ? controller.signal : undefined,
+    })
+      .then(function (resp) {
+        return resp.json().then(function (data) {
+          if (!resp.ok) {
+            throw new Error(data && data.error ? data.error : "HTTP " + resp.status);
+          }
+          return data;
+        });
+      })
+      .then(function (task) {
+        tasksCache.push(task);
+        renderTasks(tasksCache);
+        form.reset();
+      })
+      .catch(function (err) {
+        showFormError(err.message || "Could not create the task.");
+      })
+      .finally(function () {
+        if (timer) clearTimeout(timer);
+      });
+  }
+
   buildColumns();
+  form.addEventListener("submit", createTask);
   refresh();
   setInterval(refresh, REFRESH_MS);
 })();

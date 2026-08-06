@@ -1,4 +1,4 @@
-"""Read-only local HTTP API served while the factory daemon is running.
+"""Local HTTP API and dashboard served while the factory daemon is running.
 
 Binds ``config.web_host`` (default ``127.0.0.1``) using the stdlib
 ``http.server`` / ``socketserver``. A bind failure is logged and the daemon
@@ -8,8 +8,10 @@ continues without the API.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
+import re
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -18,7 +20,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 from factory.backlog import JSONBacklog
 from factory.daemon import FactoryDaemon
-from factory.models import FactoryConfig
+from factory.models import FactoryConfig, Task
 from factory.runs import RunRecorder, runs_path_for
 from factory.web_common import (
     DEFAULT_LOG_LINES,
@@ -52,6 +54,19 @@ class ApiState:
         self.backlog = backlog
         self.daemon = daemon
         self.loop: asyncio.AbstractEventLoop | None = None
+
+
+_WEB_TASK_ID_RE = re.compile(r"^WEB-(\d+)$")
+
+
+def web_task_id_for(tasks: list[Task]) -> str:
+    """Next ``WEB-###`` id after the highest existing ``WEB-###`` id."""
+    highest = 0
+    for task in tasks:
+        match = _WEB_TASK_ID_RE.match(task.id)
+        if match:
+            highest = max(highest, int(match.group(1)))
+    return f"WEB-{highest + 1:03d}"
 
 
 def make_handler(state: ApiState) -> type[BaseHTTPRequestHandler]:
@@ -144,6 +159,71 @@ def make_handler(state: ApiState) -> type[BaseHTTPRequestHandler]:
             except Exception:
                 logger.exception("Web request failed: %s", path)
                 self._send_json(500, {"error": "internal server error"})
+
+        def do_POST(self) -> None:
+            parsed = urlparse(self.path)
+            path = parsed.path
+
+            try:
+                if path == "/api/tasks":
+                    self._post_task()
+                    return
+                self._send_json(404, {"error": "not found"})
+            except Exception:
+                logger.exception("Web request failed: %s", path)
+                self._send_json(500, {"error": "internal server error"})
+
+        def _post_task(self) -> None:
+            """Create a task from a JSON body (``title`` required)."""
+            raw_length = self.headers.get("Content-Length")
+            if raw_length is None:
+                self._send_json(400, {"error": "request body is required"})
+                return
+            try:
+                length = int(raw_length)
+            except ValueError:
+                self._send_json(400, {"error": "invalid Content-Length"})
+                return
+            body = self.rfile.read(max(length, 0))
+            try:
+                payload = json.loads(body.decode("utf-8"))
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                self._send_json(400, {"error": "request body must be JSON"})
+                return
+            if not isinstance(payload, dict):
+                self._send_json(400, {"error": "request body must be a JSON object"})
+                return
+            title = payload.get("title")
+            if not isinstance(title, str) or not title.strip():
+                self._send_json(400, {"error": "title is required"})
+                return
+            description = payload.get("description", "")
+            if not isinstance(description, str):
+                self._send_json(400, {"error": "description must be a string"})
+                return
+            acceptance_criteria = payload.get("acceptance_criteria", [])
+            if not isinstance(acceptance_criteria, list) or not all(
+                isinstance(criterion, str) for criterion in acceptance_criteria
+            ):
+                self._send_json(
+                    400, {"error": "acceptance_criteria must be a list of strings"}
+                )
+                return
+            existing = self._run_async(state.backlog.list_tasks())
+            task = Task(
+                id=web_task_id_for(existing),
+                title=title.strip(),
+                description=description,
+                acceptance_criteria=acceptance_criteria,
+            )
+            try:
+                created = self._run_async(state.backlog.create_task(task))
+            except ValueError:
+                self._send_json(
+                    409, {"error": f"task id already exists in backlog: {task.id!r}"}
+                )
+                return
+            self._send_json(201, created.model_dump(mode="json"))
 
         def _status_payload(self) -> dict[str, Any]:
             daemon = state.daemon

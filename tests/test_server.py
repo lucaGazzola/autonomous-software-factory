@@ -36,6 +36,26 @@ def _get(url: str) -> tuple[int, dict | list | str]:
             return exc.code, body
 
 
+def _post(url: str, data: str | None) -> tuple[int, dict | list | str]:
+    body = data.encode("utf-8") if data is not None else None
+    request = urllib.request.Request(url, data=body, method="POST")
+    if body is not None:
+        request.add_header("Content-Type", "application/json")
+    try:
+        with urllib.request.urlopen(request, timeout=5) as resp:
+            resp_body = resp.read().decode("utf-8")
+            ctype = resp.headers.get_content_type()
+            if ctype == "application/json":
+                return resp.status, json.loads(resp_body)
+            return resp.status, resp_body
+    except urllib.error.HTTPError as exc:
+        resp_body = exc.read().decode("utf-8")
+        try:
+            return exc.code, json.loads(resp_body)
+        except json.JSONDecodeError:
+            return exc.code, resp_body
+
+
 @pytest.fixture
 def api_env(git_repo, tmp_path):
     log_file = tmp_path / "factory.log"
@@ -174,6 +194,141 @@ def test_api_tasks_by_id(running_server):
 
     status, data = _get(f"http://127.0.0.1:{server.port}/api/tasks/MISSING")
     assert status == 404
+
+
+def test_api_tasks_create(running_server):
+    server, _config, _backlog = running_server
+    status, data = _post(
+        f"http://127.0.0.1:{server.port}/api/tasks",
+        json.dumps({"title": "Build a thing"}),
+    )
+    assert status == 201
+    assert isinstance(data, dict)
+    assert data["id"] == "WEB-001"
+    assert data["title"] == "Build a thing"
+    assert data["description"] == ""
+    assert data["acceptance_criteria"] == []
+    assert data["status"] == "OPEN"
+
+    status, tasks = _get(f"http://127.0.0.1:{server.port}/api/tasks")
+    assert status == 200
+    assert [t["id"] for t in tasks] == ["TASK-001", "TASK-002", "WEB-001"]
+    assert tasks[-1]["title"] == "Build a thing"
+
+
+def test_api_tasks_create_increments_web_ids(running_server):
+    server, _config, _backlog = running_server
+    base = f"http://127.0.0.1:{server.port}/api/tasks"
+    _, first = _post(base, json.dumps({"title": "One"}))
+    _, second = _post(base, json.dumps({"title": "Two"}))
+    assert first["id"] == "WEB-001"
+    assert second["id"] == "WEB-002"
+
+
+def test_api_tasks_create_includes_optional_fields(running_server):
+    server, _config, _backlog = running_server
+    status, data = _post(
+        f"http://127.0.0.1:{server.port}/api/tasks",
+        json.dumps(
+            {
+                "title": "  Refactor the cache  ",
+                "description": "Make it faster.",
+                "acceptance_criteria": ["no regressions", "tests pass"],
+            }
+        ),
+    )
+    assert status == 201
+    assert data["title"] == "Refactor the cache"
+    assert data["description"] == "Make it faster."
+    assert data["acceptance_criteria"] == ["no regressions", "tests pass"]
+    assert data["created_at"]
+    assert data["updated_at"]
+
+
+def test_api_tasks_create_missing_or_blank_title_400(running_server):
+    server, _config, _backlog = running_server
+    base = f"http://127.0.0.1:{server.port}/api/tasks"
+
+    status, data = _post(base, json.dumps({}))
+    assert status == 400
+    assert data["error"]
+
+    status, data = _post(base, json.dumps({"title": "   "}))
+    assert status == 400
+    assert data["error"]
+
+    status, data = _post(base, json.dumps({"title": 42}))
+    assert status == 400
+    assert data["error"]
+
+
+def test_api_tasks_create_bad_body_400(running_server):
+    server, _config, _backlog = running_server
+    base = f"http://127.0.0.1:{server.port}/api/tasks"
+
+    status, data = _post(base, "{not json")
+    assert status == 400
+    assert data["error"]
+
+    status, data = _post(base, "[1, 2]")
+    assert status == 400
+    assert data["error"]
+
+    status, data = _post(base, None)
+    assert status == 400
+    assert data["error"]
+
+
+def test_api_tasks_create_bad_field_types_400(running_server):
+    server, _config, _backlog = running_server
+    base = f"http://127.0.0.1:{server.port}/api/tasks"
+
+    status, data = _post(base, json.dumps({"title": "x", "description": 1}))
+    assert status == 400
+    assert data["error"]
+
+    status, data = _post(
+        base, json.dumps({"title": "x", "acceptance_criteria": "nope"})
+    )
+    assert status == 400
+    assert data["error"]
+
+
+def test_api_tasks_create_id_collision_409(running_server, monkeypatch):
+    import factory.server as server_module
+
+    server, _config, _backlog = running_server
+    monkeypatch.setattr(server_module, "web_task_id_for", lambda tasks: "TASK-001")
+    status, data = _post(
+        f"http://127.0.0.1:{server.port}/api/tasks",
+        json.dumps({"title": "Duplicate"}),
+    )
+    assert status == 409
+    assert data["error"]
+
+
+def test_api_tasks_create_does_not_leak_failed_task(running_server, monkeypatch):
+    import factory.server as server_module
+
+    server, _config, _backlog = running_server
+    monkeypatch.setattr(server_module, "web_task_id_for", lambda tasks: "TASK-001")
+    _post(
+        f"http://127.0.0.1:{server.port}/api/tasks",
+        json.dumps({"title": "Duplicate"}),
+    )
+    status, tasks = _get(f"http://127.0.0.1:{server.port}/api/tasks")
+    assert status == 200
+    assert [t["id"] for t in tasks] == ["TASK-001", "TASK-002"]
+
+
+def test_api_post_unknown_path_404(running_server):
+    server, _config, _backlog = running_server
+    status, data = _post(
+        f"http://127.0.0.1:{server.port}/api/bogus",
+        json.dumps({"title": "x"}),
+    )
+    assert status == 404
+    assert data["error"] == "not found"
 
 
 def test_api_status(running_server):

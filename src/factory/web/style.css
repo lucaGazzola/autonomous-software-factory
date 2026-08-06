@@ -112,6 +112,77 @@ body {
   white-space: nowrap;
 }
 
+/* ---------- New task form ---------- */
+
+.new-task {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.new-task__fields {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  gap: 10px;
+  min-width: 0;
+}
+
+.new-task input[type="text"] {
+  flex: 1 1 220px;
+  min-width: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  padding: 9px 12px;
+  outline: none;
+  transition: border-color 0.18s ease, background 0.18s ease;
+}
+
+.new-task input[type="text"]::placeholder {
+  color: var(--text-faint);
+}
+
+.new-task input[type="text"]:focus {
+  border-color: var(--accent);
+  background: var(--surface-hover);
+}
+
+.new-task button {
+  background: var(--accent-dim);
+  border: 1px solid rgba(124, 140, 255, 0.45);
+  border-radius: var(--radius-sm);
+  color: var(--accent);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 9px 18px;
+  cursor: pointer;
+  transition: background 0.18s ease, border-color 0.18s ease;
+}
+
+.new-task button:hover {
+  background: rgba(124, 140, 255, 0.24);
+  border-color: var(--accent);
+}
+
+.new-task__error {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 13px;
+  color: var(--failed);
+}
+
+.new-task__error[hidden] {
+  display: none;
+}
+
 /* ---------- Board ---------- */
 
 .board {
