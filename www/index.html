@@ -1,0 +1,399 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Forgeo — The autonomous software factory</title>
+<meta name="description" content="Forgeo is an autonomous software factory: write your tasks, and an AI coding agent builds, commits, and ships your software — no development team required.">
+<meta property="og:title" content="Forgeo — The autonomous software factory">
+<meta property="og:description" content="Turn a backlog into shipped software. An AI agent does the building; Forgeo does the managing. No development team required.">
+<meta property="og:type" content="website">
+<meta property="og:image" content="/img/console.png">
+<link rel="icon" href="/img/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #070b14;
+    --bg-soft: #0b1120;
+    --panel: rgba(255, 255, 255, 0.04);
+    --panel-border: rgba(255, 255, 255, 0.09);
+    --text: #e8ecf5;
+    --muted: #9aa6bd;
+    --accent: #6366f1;
+    --accent-2: #22d3ee;
+    --accent-3: #085688;
+    --gradient: linear-gradient(135deg, #6366f1 0%, #22d3ee 100%);
+    --radius: 16px;
+    --font: "Inter", -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+  a { color: inherit; text-decoration: none; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+
+  /* ---------- background ---------- */
+  .bg-fixed { position: fixed; inset: 0; z-index: -2; background: var(--bg); }
+  .bg-glow { position: fixed; inset: -20% -10% auto; z-index: -1; height: 900px; pointer-events: none;
+    background:
+      radial-gradient(600px 380px at 18% 8%, rgba(99, 102, 241, 0.22), transparent 65%),
+      radial-gradient(700px 420px at 82% 4%, rgba(34, 211, 238, 0.13), transparent 65%),
+      radial-gradient(800px 500px at 50% 22%, rgba(8, 86, 136, 0.20), transparent 70%);
+  }
+  .bg-grid { position: fixed; inset: 0; z-index: -1; pointer-events: none;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.028) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.028) 1px, transparent 1px);
+    background-size: 44px 44px;
+    mask-image: radial-gradient(ellipse 90% 55% at 50% 0%, black 35%, transparent 75%);
+  }
+
+  /* ---------- nav ---------- */
+  nav { position: sticky; top: 0; z-index: 50; backdrop-filter: blur(14px);
+    background: rgba(7, 11, 20, 0.72); border-bottom: 1px solid rgba(255,255,255,0.06); }
+  .nav-inner { display: flex; align-items: center; gap: 32px; height: 64px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 19px; letter-spacing: -0.02em; color: #03578b; }
+  .brand .logo { height: 30px; width: auto; display: block; }
+  .nav-links { display: flex; gap: 26px; margin-left: auto; }
+  .nav-links a { color: var(--muted); font-size: 14.5px; font-weight: 500; transition: color .18s; }
+  .nav-links a:hover { color: var(--text); }
+
+  /* ---------- hero ---------- */
+  header.hero { padding: 96px 0 40px; text-align: center; }
+  h1 { margin: 0 auto; max-width: 860px; font-size: clamp(40px, 6.4vw, 72px); font-weight: 800;
+    line-height: 1.06; letter-spacing: -0.03em; }
+  .grad { background: var(--gradient); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .lead { margin: 24px auto 0; max-width: 640px; font-size: clamp(16px, 2vw, 19px); color: var(--muted); }
+  .lead strong { color: var(--text); font-weight: 600; }
+  .cta { margin-top: 40px; display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+  .btn { display: inline-flex; align-items: center; gap: 10px; padding: 14px 26px; border-radius: 12px;
+    font-size: 15.5px; font-weight: 600; transition: transform .15s, box-shadow .2s, background .2s; }
+  .btn-primary { background: var(--gradient); color: #fff; box-shadow: 0 8px 30px rgba(99,102,241,0.35); }
+  .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 12px 40px rgba(99,102,241,0.5); }
+  .btn-secondary { background: var(--panel); border: 1px solid var(--panel-border); color: var(--text); }
+  .btn-secondary:hover { transform: translateY(-2px); background: rgba(255,255,255,0.07); }
+  .btn svg { opacity: 0.9; }
+
+  /* ---------- install box ---------- */
+  .install { margin: 64px auto 0; max-width: 720px; text-align: left; }
+  .term { border-radius: var(--radius); border: 1px solid var(--panel-border); overflow: hidden;
+    background: #0a0f1c; box-shadow: 0 30px 80px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.03), 0 0 60px rgba(99,102,241,0.10); }
+  .term-bar { display: flex; align-items: center; gap: 8px; padding: 12px 16px; background: rgba(255,255,255,0.03);
+    border-bottom: 1px solid var(--panel-border); }
+  .dot-x { width: 11px; height: 11px; border-radius: 50%; background: #ff5f57; }
+  .dot-y { width: 11px; height: 11px; border-radius: 50%; background: #febc2e; }
+  .dot-z { width: 11px; height: 11px; border-radius: 50%; background: #28c840; }
+  .term-title { margin-left: 10px; font-size: 12.5px; color: var(--muted); font-weight: 500; }
+  .term-body { padding: 18px 20px 20px; }
+  .cmd { display: flex; align-items: center; gap: 12px; font-family: var(--mono); font-size: 14.5px; }
+  .cmd .prompt { color: var(--accent-2); font-weight: 600; flex: none; }
+  .cmd .text { color: #dfe6f3; word-break: break-all; }
+  .copy { margin-left: auto; flex: none; border: 1px solid var(--panel-border); background: rgba(255,255,255,0.05);
+    color: var(--muted); border-radius: 8px; padding: 7px 11px; cursor: pointer; font-size: 12px; font-weight: 600;
+    font-family: var(--font); transition: all .15s; }
+  .copy:hover { color: var(--text); background: rgba(255,255,255,0.1); }
+  .copy.ok { color: #34d399; border-color: rgba(52,211,153,0.4); }
+  .term-foot { padding: 12px 20px 16px; font-size: 13px; color: var(--muted); border-top: 1px dashed rgba(255,255,255,0.07); }
+  .term-foot code { color: #c7d2fe; font-family: var(--mono); font-size: 12.5px; }
+  .hint { margin-top: 18px; text-align: center; font-size: 13.5px; color: var(--muted); }
+  .hint a { color: #a5b4fc; font-weight: 600; }
+  .hint a:hover { text-decoration: underline; }
+
+  /* ---------- sections ---------- */
+  section { padding: 96px 0 40px; }
+  .eyebrow { font-size: 13px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: #818cf8; }
+  h2 { margin-top: 14px; font-size: clamp(28px, 4vw, 40px); font-weight: 800; letter-spacing: -0.025em; line-height: 1.15; }
+  .sub { margin-top: 14px; max-width: 620px; color: var(--muted); font-size: 16.5px; }
+
+  /* ---------- how it works ---------- */
+  .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; margin-top: 48px; }
+  .step { position: relative; padding: 30px 28px; border-radius: var(--radius); background: var(--panel);
+    border: 1px solid var(--panel-border); transition: transform .2s, border-color .2s; }
+  .step:hover { transform: translateY(-4px); border-color: rgba(99,102,241,0.4); }
+  .step-num { font-family: var(--mono); font-size: 13px; font-weight: 600; color: var(--accent-2); }
+  .step h3 { margin-top: 14px; font-size: 18.5px; font-weight: 700; }
+  .step p { margin-top: 10px; font-size: 14.5px; color: var(--muted); }
+
+  /* ---------- screenshot ---------- */
+  .shot-wrap { margin-top: 56px; }
+  .browser { border-radius: var(--radius); border: 1px solid var(--panel-border); overflow: hidden;
+    background: #0a0f1c; box-shadow: 0 40px 100px rgba(0,0,0,0.6), 0 0 80px rgba(34,211,238,0.07); }
+  .browser-bar { display: flex; align-items: center; gap: 8px; padding: 12px 16px; background: rgba(255,255,255,0.03);
+    border-bottom: 1px solid var(--panel-border); }
+  .url-pill { margin-left: auto; margin-right: auto; padding: 5px 18px; border-radius: 8px; background: rgba(255,255,255,0.05);
+    border: 1px solid var(--panel-border); font-size: 12.5px; color: var(--muted); font-family: var(--mono); }
+  .browser img { display: block; width: 100%; height: auto; }
+  .shot-caption { margin-top: 20px; text-align: center; color: var(--muted); font-size: 14.5px; }
+
+  /* ---------- features ---------- */
+  .feats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; margin-top: 48px; }
+  .feat { padding: 28px 26px; border-radius: var(--radius); background: var(--panel); border: 1px solid var(--panel-border);
+    transition: transform .2s, border-color .2s; }
+  .feat:hover { transform: translateY(-4px); border-color: rgba(34,211,238,0.35); }
+  .feat-icon { width: 42px; height: 42px; border-radius: 11px; display: flex; align-items: center; justify-content: center;
+    background: linear-gradient(135deg, rgba(99,102,241,0.22), rgba(34,211,238,0.16)); border: 1px solid rgba(99,102,241,0.3); }
+  .feat h3 { margin-top: 18px; font-size: 17px; font-weight: 700; }
+  .feat p { margin-top: 9px; font-size: 14px; color: var(--muted); }
+
+  /* ---------- agents strip ---------- */
+  .agents { margin-top: 48px; padding: 34px 32px; border-radius: var(--radius); text-align: center;
+    background: linear-gradient(135deg, rgba(99,102,241,0.10), rgba(8,86,136,0.12));
+    border: 1px solid rgba(99,102,241,0.25); }
+  .agents p { color: var(--muted); font-size: 14.5px; }
+  .agent-chips { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 18px; }
+  .chip { padding: 9px 20px; border-radius: 999px; border: 1px solid var(--panel-border); background: rgba(255,255,255,0.04);
+    font-family: var(--mono); font-size: 14px; font-weight: 600; color: #dbe4f5; }
+
+  /* ---------- final cta ---------- */
+  .cta-box { margin-top: 40px; padding: 64px 32px; text-align: center; border-radius: 22px;
+    background: linear-gradient(140deg, rgba(99,102,241,0.16), rgba(8,86,136,0.18) 60%, rgba(34,211,238,0.10));
+    border: 1px solid rgba(99,102,241,0.3); position: relative; overflow: hidden; }
+  .cta-box::before { content: ""; position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(500px 200px at 50% -10%, rgba(99,102,241,0.25), transparent 70%); }
+  .cta-box h2 { margin-top: 8px; }
+  .cta-box .sub { margin-left: auto; margin-right: auto; }
+
+  /* ---------- footer ---------- */
+  footer { margin-top: 110px; border-top: 1px solid rgba(255,255,255,0.06); padding: 42px 0 56px; }
+  .foot { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; }
+  .foot .brand { font-size: 16px; }
+  .foot .brand .logo { height: 24px; }
+  .foot-links { display: flex; gap: 22px; margin-left: auto; }
+  .foot-links a { color: var(--muted); font-size: 14px; font-weight: 500; }
+  .foot-links a:hover { color: var(--text); }
+  .foot-note { margin-top: 26px; font-size: 13px; color: #6b7688; }
+  .foot-note a { color: #a5b4fc; font-weight: 600; }
+  .foot-note a:hover { text-decoration: underline; }
+
+  @media (max-width: 860px) {
+    .steps, .feats { grid-template-columns: 1fr; }
+    .nav-links { display: none; }
+    header.hero { padding-top: 64px; }
+    .url-pill { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="bg-fixed"></div>
+<div class="bg-glow"></div>
+<div class="bg-grid"></div>
+
+<nav>
+  <div class="wrap nav-inner">
+    <a class="brand" href="/">
+      <img class="logo" src="/img/logo.png" alt="Forgeo logo">
+      Forgeo
+    </a>
+    <div class="nav-links">
+      <a href="#how">How it works</a>
+      <a href="#console">Dashboard</a>
+      <a href="#features">Features</a>
+      <a href="/docs/">Docs</a>
+      <a href="https://github.com/lucaGazzola/forgeo">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <h1>You write the tasks.<br>Forgeo <span class="grad">builds the software.</span></h1>
+    <p class="lead">
+      A scheduled factory for your repository. You keep a simple list of tasks —
+      an AI coding agent works through it, writing and committing real code to
+      <strong>main</strong>. No branches, no pull requests, <strong>no developer on
+      staff</strong>. If you can describe what to build, Forgeo can build it.
+    </p>
+    <div class="cta">
+      <a class="btn btn-primary" href="/docs/getting-started/">
+        Get started
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 8h9M9 4l4 4-4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </a>
+      <a class="btn btn-secondary" href="https://github.com/lucaGazzola/forgeo">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+        Star on GitHub
+      </a>
+    </div>
+
+    <div class="install">
+      <div class="term">
+        <div class="term-bar">
+          <span class="dot-x"></span><span class="dot-y"></span><span class="dot-z"></span>
+          <span class="term-title">terminal — install &amp; launch your factory</span>
+        </div>
+        <div class="term-body">
+          <div class="cmd">
+            <span class="prompt">$</span>
+            <span class="text">curl -fsSL https://forgeo.org/install.sh | bash</span>
+            <button class="copy" data-copy="curl -fsSL https://forgeo.org/install.sh | bash">copy</button>
+          </div>
+        </div>
+        <div class="term-foot">
+          <code>factory init</code> &nbsp;·&nbsp; guided wizard in your project root &nbsp;—&nbsp; then <code>factory start</code> and watch it ship.
+        </div>
+      </div>
+      <p class="hint">Works with Claude Code, aider, opencode or any CLI agent — see the <a href="/docs/agent-contract/">agent contract</a>.</p>
+    </div>
+  </div>
+</header>
+
+<section id="how">
+  <div class="wrap">
+    <span class="eyebrow">How it works</span>
+    <h2>From backlog to shipped code, on repeat</h2>
+    <p class="sub">Three steps and Forgeo runs forever — waking up on its own schedule and deciding what to do next.</p>
+    <div class="steps">
+      <div class="step">
+        <span class="step-num">01</span>
+        <h3>Write your tasks</h3>
+        <p>Describe what needs to be built in a plain JSON backlog. One task at a time, in the order you wrote them.</p>
+      </div>
+      <div class="step">
+        <span class="step-num">02</span>
+        <h3>The agent implements</h3>
+        <p>Each cycle, Forgeo hands the oldest task to your coding agent, then commits and pushes the result straight to main.</p>
+      </div>
+      <div class="step">
+        <span class="step-num">03</span>
+        <h3>Or refactors on its own</h3>
+        <p>Empty backlog? The same agent reviews the codebase and cleans it up. Forgeo only interrupts you when a decision is genuinely yours.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="console">
+  <div class="wrap">
+    <span class="eyebrow">See it running</span>
+    <h2>A live dashboard, not a black box</h2>
+    <p class="sub">Forgeo serves a local web console while it works — every cycle, outcome, log line and blocker, visible at a glance.</p>
+    <div class="shot-wrap">
+      <div class="browser">
+        <div class="browser-bar">
+          <span class="dot-x"></span><span class="dot-y"></span><span class="dot-z"></span>
+          <span class="url-pill">http://127.0.0.1:8787</span>
+        </div>
+        <img src="/img/console.png" alt="Forgeo web console dashboard">
+      </div>
+      <p class="shot-caption">The Forgeo web console — backlog status, run history and logs, served locally at port 8787.</p>
+    </div>
+  </div>
+</section>
+
+<section id="features">
+  <div class="wrap">
+    <span class="eyebrow">Why Forgeo</span>
+    <h2>Engineering without an engineering team</h2>
+    <p class="sub">Everything a small software org would do by hand, automated around a single repository and a single branch.</p>
+    <div class="feats">
+      <div class="feat">
+        <div class="feat-icon">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M4 5h12M4 10h12M4 15h7" stroke="#a5b4fc" stroke-width="2" stroke-linecap="round"/></svg>
+        </div>
+        <h3>Backlog-driven</h3>
+        <p>A plain-JSON task list is the whole interface. Oldest task first, always one at a time, never overlapping runs.</p>
+      </div>
+      <div class="feat">
+        <div class="feat-icon">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M3 16h14M6 13V7l3 3 2-6 3 5 2-2v6" stroke="#a5b4fc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <h3>Agent-agnostic</h3>
+        <p>Any coding agent that can read an environment variable — Claude Code, aider, opencode, or your own script.</p>
+      </div>
+      <div class="feat">
+        <div class="feat-icon">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M4 10h12M4 10l4-4M4 10l4 4" stroke="#a5b4fc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <h3>No branches, no PRs</h3>
+        <p>One repository, one branch, one commit per task. The noise of code review bureaucracy disappears.</p>
+      </div>
+      <div class="feat">
+        <div class="feat-icon">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M10 3v14M10 3L6 7M10 3l4 4M10 17l-4-4M10 17l4-4" stroke="#a5b4fc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <h3>Self-maintaining</h3>
+        <p>When the backlog is empty the agent refactors: dead code, duplication, stale comments — kept tidy, automatically.</p>
+      </div>
+      <div class="feat">
+        <div class="feat-icon">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M10 9l5-3M10 9v7M10 9 5 6M3 13l4 2.5M10 17.5 15 15" stroke="#a5b4fc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <h3>Stops when it must</h3>
+        <p>If the agent hits a decision only a human can make, Forgeo writes BLOCKER.md, pauses, and waits for you.</p>
+      </div>
+      <div class="feat">
+        <div class="feat-icon">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><rect x="3" y="3" width="14" height="14" rx="3" stroke="#a5b4fc" stroke-width="2"/><path d="M7 10l2 2 4-4" stroke="#a5b4fc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <h3>Keeps you posted</h3>
+        <p>A local web dashboard plus optional Telegram notifications when your input is needed — nothing else disturbs you.</p>
+      </div>
+    </div>
+
+    <div class="agents">
+      <p><strong style="color:var(--text)">Bring your own agent</strong> — Forgeo orchestrates, your favourite CLI builds:</p>
+      <div class="agent-chips">
+        <span class="chip">claude</span>
+        <span class="chip">aider</span>
+        <span class="chip">opencode</span>
+        <span class="chip">codex</span>
+        <span class="chip">any CLI script</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="cta-box">
+      <span class="eyebrow">Ready when you are</span>
+      <h2>Start your factory tonight</h2>
+      <p class="sub">Install with a one-liner, run <code style="font-family:var(--mono);color:#c7d2fe">factory init</code> in your project, and let the agent do the work.</p>
+      <div class="cta">
+        <a class="btn btn-primary" href="/docs/getting-started/">Read getting started</a>
+        <a class="btn btn-secondary" href="/docs/">Browse the docs</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="foot">
+      <a class="brand" href="/">
+        <img class="logo" src="/img/logo.png" alt="Forgeo logo">
+        Forgeo
+      </a>
+      <div class="foot-links">
+        <a href="/docs/">Documentation</a>
+        <a href="https://github.com/lucaGazzola/forgeo">GitHub</a>
+        <a href="https://github.com/lucaGazzola/forgeo/blob/main/LICENSE">MIT License</a>
+      </div>
+    </div>
+    <p class="foot-note">Built by <a href="https://github.com/lucaGazzola">Luca Gazzola</a>.</p>
+  </div>
+</footer>
+
+<script>
+  document.querySelectorAll(".copy").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var text = btn.getAttribute("data-copy");
+      navigator.clipboard.writeText(text).then(function () {
+        btn.textContent = "copied";
+        btn.classList.add("ok");
+        setTimeout(function () { btn.textContent = "copy"; btn.classList.remove("ok"); }, 1800);
+      });
+    });
+  });
+</script>
+</body>
+</html>
