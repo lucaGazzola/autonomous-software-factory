@@ -209,8 +209,13 @@ def test_instance_page_has_new_task_form(web_env):
     server, _ = web_env
     status, body = _get(f"http://127.0.0.1:{server.port}/instances/alpha/")
     assert status == 200
+    assert 'data-tab="create"' in body
     assert 'id="new-task"' in body
     assert 'id="task-title"' in body
+    backlog_panel = body.split('<main id="tab-backlog"')[1].split("</main>")[0]
+    assert "new-task" not in backlog_panel
+    create_panel = body.split('<main id="tab-create"')[1].split("</main>")[0]
+    assert 'id="new-task"' in create_panel
 
 
 def test_unknown_instance_returns_404(web_env):

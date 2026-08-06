@@ -41,6 +41,7 @@
 
   <nav class="tabs" id="tabs">
     <button class="tab is-active" data-tab="backlog" type="button">Backlog</button>
+    <button class="tab" data-tab="create" type="button">Create</button>
     <button class="tab" data-tab="logs" type="button">Logs</button>
     <button class="tab" data-tab="runs" type="button">Runs</button>
     <button class="tab" data-tab="blocker" type="button">Blocker</button>
@@ -48,6 +49,12 @@
   </nav>
 
   <main id="tab-backlog" class="tab-panel board" aria-live="polite">
+    <div class="empty-state" id="empty-state" hidden>
+      <p class="empty-title">No tasks</p>
+      <p class="empty-sub">The backlog is empty. The factory will run a refactoring pass until a task lands.</p>
+    </div>
+  </main>
+  <main id="tab-create" class="tab-panel" hidden>
     <form class="new-task" id="new-task">
       <div class="new-task__fields">
         <input id="task-title" name="title" type="text" placeholder="New task title" autocomplete="off">
@@ -57,10 +64,6 @@
       <button type="submit">Add task</button>
       <p class="new-task__error" id="new-task-error" hidden></p>
     </form>
-    <div class="empty-state" id="empty-state" hidden>
-      <p class="empty-title">No tasks</p>
-      <p class="empty-sub">The backlog is empty. The factory will run a refactoring pass until a task lands.</p>
-    </div>
   </main>
   <main id="tab-logs" class="tab-panel" hidden>
     <pre class="code-panel" id="logs-body">(loading &hellip;)</pre>

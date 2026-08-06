@@ -8,7 +8,7 @@
   var REFRESH_MS = 30000;
   var TIMEOUT_MS = 5000;
   var STATUS_ORDER = ["OPEN", "BLOCKED", "COMPLETED", "FAILED"];
-  var TABS = ["backlog", "logs", "runs", "blocker", "config"];
+  var TABS = ["backlog", "create", "logs", "runs", "blocker", "config"];
 
   var page = document.body.dataset.page || "home";
   var match = page === "instance" ? location.pathname.match(/^\/instances\/([^/]+)\/?/) : null;
@@ -299,7 +299,7 @@
   }
 
   function loadTab(tab) {
-    if (!API || tab === "backlog") return;
+    if (!API || tab === "backlog" || tab === "create") return;
     if (tab === "logs") {
       fetchJSON(API + "logs?lines=200")
         .then(function (data) {
