@@ -178,10 +178,10 @@ missing instance prints an error and exits `1`.
 
 ### `factory instance list` / `factory list`
 
-List every registered instance as a table: name, config path, repository,
-daemon state (running/stopped), last outcome (from `runs.jsonl`), and backlog
-counts. `factory list` is a direct alias for `factory instance list`. With no
-registered instances it prints a hint and exits `0`.
+List every registered instance as a compact table that fits narrow
+terminals: name, daemon state (running/stopped), and last outcome (from
+`runs.jsonl`). `factory list` is a direct alias for `factory instance
+list`. With no registered instances it prints a hint and exits `0`.
 
 ## `factory web`
 
@@ -198,8 +198,8 @@ whether or not each instance's daemon is running.
 
 - `GET /` — home page listing every registered instance (daemon state, last
   outcome, next run, backlog counts).
-- `GET /instances/<name>/` — one instance's page: its kanban backlog (with a
-  form to add tasks) plus tabs for logs, runs, blocker, and config.
+- `GET /instances/<name>/` — one instance's page: its kanban backlog, a
+  Create tab with a task form, plus tabs for logs, runs, blocker, and config.
 
 See [Web console & HTTP API](web-console-api.md) for the full API. This is
 the only web dashboard: daemons themselves bind no ports.

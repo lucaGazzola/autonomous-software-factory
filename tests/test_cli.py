@@ -647,14 +647,15 @@ def test_instance_list_table_shows_state(tmp_path, git_repo, monkeypatch, capsys
         )
     )
 
+    capsys.readouterr()
     assert cmd_instance_list(argparse.Namespace()) == 0
     out = capsys.readouterr().out
     assert "my-repo" in out
     assert "SUCCESS" in out
-    assert "OPEN=1" in out
-    assert str(config_path) in out
-    assert str(git_repo) in out
     assert "stopped" in out
+    assert str(config_path) not in out
+    assert str(git_repo) not in out
+    assert "OPEN=" not in out
 
 
 def test_instance_list_reports_daemon_running(tmp_path, git_repo, monkeypatch, capsys):

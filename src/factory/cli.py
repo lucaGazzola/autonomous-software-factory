@@ -45,7 +45,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import io
 import logging
 import os
 import signal
@@ -672,27 +671,18 @@ def cmd_instance_rm(args: argparse.Namespace) -> int:
 
 
 def _instance_row(info: InstanceInfo) -> tuple[str, ...]:
-    """Render one instance's table row (name, config, repo, daemon, outcome, backlog)."""
+    """Render one instance's table row (name, daemon state, last outcome)."""
     if info.config is None:
         return (
             info.name,
-            str(info.config_path),
-            "(unavailable)",
             "stopped",
             "(none)",
-            "—",
         )
-    tasks = asyncio.run(JSONBacklog(info.config.backlog).list_tasks())
-    counts = backlog_status_counts(tasks)
-    counts_text = " ".join(f"{status}={counts[status]}" for status in counts)
     last_outcome = last_outcome_from_runs(info.config) or "(none)"
     return (
         info.name,
-        str(info.config_path),
-        str(info.repo),
         "running" if info.daemon_running else "stopped",
         last_outcome,
-        counts_text,
     )
 
 
@@ -706,20 +696,12 @@ def cmd_instance_list(args: argparse.Namespace) -> int:
         )
         return 0
     table = Table(title="Forgeo instances")
-    for column in ("Name", "Config", "Repo", "Daemon", "Last outcome", "Backlog"):
+    for column in ("Name", "Daemon", "Last outcome"):
         table.add_column(column, overflow="fold")
     for info in infos:
         table.add_row(*_instance_row(info))
-    # Size the console to the table's natural width so long config/repo paths
-    # are never truncated or folded mid-string; a wide terminal output simply
-    # wraps at the user's screen edge while keeping every field intact.
-    buffer = io.StringIO()
-    probe = Console(file=buffer, width=100_000)
-    probe.print(table)
-    natural = max(
-        (len(line) for line in buffer.getvalue().splitlines()), default=80
-    )
-    Console(width=natural + 4).print(table)
+    # Fits any terminal width: three short columns, no long paths.
+    console.print(table)
     return 0
 
 
