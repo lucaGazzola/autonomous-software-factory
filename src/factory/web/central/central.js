@@ -13,7 +13,7 @@
   var page = document.body.dataset.page || "home";
   var match = page === "instance" ? location.pathname.match(/^\/instances\/([^/]+)\/?/) : null;
   var instanceName = match ? decodeURIComponent(match[1]) : null;
-  var API = instanceName ? "api/instances/" + encodeURIComponent(instanceName) + "/" : null;
+  var API = instanceName ? "/api/instances/" + encodeURIComponent(instanceName) + "/" : null;
   var currentTab = "backlog";
 
   function el(tag, className, text) {
@@ -150,7 +150,7 @@
   }
 
   function refreshHome() {
-    fetchJSON("api/instances")
+    fetchJSON("/api/instances")
       .then(function (data) {
         renderHome(data);
         setDown(false);
