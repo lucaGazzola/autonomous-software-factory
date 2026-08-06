@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 import time
@@ -11,26 +12,54 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
+
 from factory.cli import (
+    DEFAULT_CONFIG,
     backlog_status_counts,
     build_parser,
+    cmd_instance,
+    cmd_instance_add,
+    cmd_instance_list,
+    cmd_instance_rm,
     cmd_once,
     cmd_restart,
     cmd_status,
     cmd_stop,
     last_outcome_from_runs,
+    main,
     render_status,
 )
 from factory.daemon import acquire_run_lock, is_lock_held, read_lock_pid
+from factory.instances import list_instances, load_registry
 from factory.models import RunKind, RunOutcome, RunRecord, TaskStatus
 from factory.runs import RunRecorder, runs_path_for
-from tests.conftest import FakeFactory, make_config, make_task
+from tests.conftest import FakeFactory, git, make_config, make_task
 
 
 def write_config(git_repo: Path, tmp_path: Path, **overrides) -> Path:
     """A config file wired to the fixture repo; returns its path."""
     config = make_config(git_repo, tmp_path, **overrides)
     path = tmp_path / "factory.yaml"
+    path.write_text(
+        f"name: {config.name}\n"
+        f"repo: {config.repo}\n"
+        f"backlog: {config.backlog}\n"
+        f"blocker_file: {config.blocker_file}\n"
+        f"agent_command: {config.agent_command}\n"
+        f"log_file: {config.log_file}\n"
+        f"interval_minutes: {config.interval_minutes}\n"
+        f"branch: {config.branch}\n"
+        f"web_port: {config.web_port}\n",
+        encoding="utf-8",
+    )
+    return path
+
+
+def write_config_in(dir_path: Path, git_repo: Path, tmp_path: Path, **overrides) -> Path:
+    """A factory.yaml inside ``dir_path`` wired to ``git_repo``; returns its path."""
+    config = make_config(git_repo, tmp_path, **overrides)
+    path = dir_path / "factory.yaml"
     path.write_text(
         f"name: {config.name}\n"
         f"repo: {config.repo}\n"
@@ -437,3 +466,449 @@ def test_restart_replaces_running_daemon(git_repo, tmp_path, capsys):
         if old_proc.poll() is None:
             old_proc.kill()
         cmd_stop(stop_args(config_path))
+
+
+# --------------------------------------------------------------------------- #
+# Instance registry CLI (--name, instance add/rm/list, factory list alias)    #
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.parametrize("command", ["start", "once", "status", "stop", "restart"])
+def test_parser_accepts_name_for_commands(command):
+    args = build_parser().parse_args([command, "--name", "my-repo"])
+    assert getattr(args, "name", None) == "my-repo"
+
+
+@pytest.mark.parametrize("command", ["start", "once", "status", "stop", "restart"])
+def test_parser_rejects_name_with_config(command):
+    with pytest.raises(SystemExit) as excinfo:
+        build_parser().parse_args([command, "--name", "x", "--config", "factory.yaml"])
+    assert excinfo.value.code == 2
+
+
+def test_parser_parses_instance_subcommands():
+    args = build_parser().parse_args(["instance", "add", "my-repo", "--config", "a.yaml"])
+    assert args.action == "instance"
+    assert args.instance_action == "add"
+    assert args.name == "my-repo"
+    assert args.config == Path("a.yaml")
+
+    assert build_parser().parse_args(["instance", "rm", "my-repo"]).instance_action == "rm"
+    assert build_parser().parse_args(["instance", "list"]).instance_action == "list"
+    assert build_parser().parse_args(["list"]).action == "list"
+
+
+def test_instance_add_and_register(tmp_path, git_repo, monkeypatch, capsys):
+    monkeypatch.setenv("FORGEO_REGISTRY", str(tmp_path / "instances.yaml"))
+    config_path = write_config(git_repo, tmp_path)
+
+    assert cmd_instance_add(argparse.Namespace(name="my-repo", config=config_path)) == 0
+    assert "Registered instance" in capsys.readouterr().out
+    assert load_registry() == {"my-repo": str(config_path.resolve())}
+
+
+def test_instance_add_invalid_name(tmp_path, git_repo, monkeypatch, capsys):
+    monkeypatch.setenv("FORGEO_REGISTRY", str(tmp_path / "instances.yaml"))
+    config_path = write_config(git_repo, tmp_path)
+
+    assert cmd_instance_add(argparse.Namespace(name="bad name", config=config_path)) == 1
+    assert "invalid instance name" in capsys.readouterr().out
+    assert load_registry() == {}
+
+
+def test_instance_add_duplicate(tmp_path, git_repo, monkeypatch, capsys):
+    monkeypatch.setenv("FORGEO_REGISTRY", str(tmp_path / "instances.yaml"))
+    config_path = write_config(git_repo, tmp_path)
+    assert cmd_instance_add(argparse.Namespace(name="my-repo", config=config_path)) == 0
+    capsys.readouterr()
+
+    assert cmd_instance_add(argparse.Namespace(name="my-repo", config=config_path)) == 1
+    assert "already registered" in capsys.readouterr().out
+
+
+def test_instance_add_missing_config(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("FORGEO_REGISTRY", str(tmp_path / "instances.yaml"))
+    assert (
+        cmd_instance_add(argparse.Namespace(name="x", config=tmp_path / "missing.yaml"))
+        == 1
+    )
+    assert "No such file" in capsys.readouterr().out
+
+
+def test_instance_rm_unregisters(tmp_path, git_repo, monkeypatch, capsys):
+    monkeypatch.setenv("FORGEO_REGISTRY", str(tmp_path / "instances.yaml"))
+    config_path = write_config(git_repo, tmp_path)
+    assert cmd_instance_add(argparse.Namespace(name="my-repo", config=config_path)) == 0
+    capsys.readouterr()
+
+    assert cmd_instance_rm(argparse.Namespace(name="my-repo")) == 0
+    assert "Unregistered" in capsys.readouterr().out
+    assert load_registry() == {}
+
+    assert cmd_instance_rm(argparse.Namespace(name="my-repo")) == 1
+    assert "Unknown instance" in capsys.readouterr().out
+
+
+def test_instance_rm_never_touches_config(tmp_path, git_repo, monkeypatch):
+    monkeypatch.setenv("FORGEO_REGISTRY", str(tmp_path / "instances.yaml"))
+    config_path = write_config(git_repo, tmp_path)
+    before = config_path.read_text()
+    assert cmd_instance_add(argparse.Namespace(name="my-repo", config=config_path)) == 0
+
+    assert cmd_instance_rm(argparse.Namespace(name="my-repo")) == 0
+    assert config_path.exists()
+    assert config_path.read_text() == before
+
+
+def test_instance_list_empty(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("FORGEO_REGISTRY", str(tmp_path / "instances.yaml"))
+    assert cmd_instance_list(argparse.Namespace()) == 0
+    assert "No registered instances" in capsys.readouterr().out
+
+
+def test_instance_list_table_shows_state(tmp_path, git_repo, monkeypatch, capsys):
+    monkeypatch.setenv("FORGEO_REGISTRY", str(tmp_path / "instances.yaml"))
+    config_path = write_config(git_repo, tmp_path)
+    assert cmd_instance_add(argparse.Namespace(name="my-repo", config=config_path)) == 0
+    backlog = tmp_path / "backlog.json"
+    backlog.write_text(
+        json.dumps(
+            {
+                "tasks": [
+                    {
+                        "id": "TASK-001",
+                        "title": "Do it",
+                        "status": "OPEN",
+                        "created_at": "2026-01-01T00:00:00Z",
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    RunRecorder(runs_path_for(backlog)).append(
+        RunRecord(
+            started_at=datetime(2026, 8, 1, 1, 0, tzinfo=UTC),
+            finished_at=datetime(2026, 8, 1, 1, 0, 5, tzinfo=UTC),
+            kind=RunKind.TASK,
+            task_id="TASK-001",
+            task_title="Do it",
+            outcome=RunOutcome.SUCCESS,
+            agent_exit_code=0,
+            duration_seconds=5.0,
+        )
+    )
+
+    assert cmd_instance_list(argparse.Namespace()) == 0
+    out = capsys.readouterr().out
+    assert "my-repo" in out
+    assert "SUCCESS" in out
+    assert "OPEN=1" in out
+    assert str(config_path) in out
+    assert str(git_repo) in out
+    assert "stopped" in out
+
+
+def test_instance_list_reports_daemon_running(tmp_path, git_repo, monkeypatch, capsys):
+    monkeypatch.setenv("FORGEO_REGISTRY", str(tmp_path / "instances.yaml"))
+    config_path = write_config(git_repo, tmp_path)
+    assert cmd_instance_add(argparse.Namespace(name="my-repo", config=config_path)) == 0
+    lock = acquire_run_lock(tmp_path / "backlog.lock")
+    assert lock is not None
+    try:
+        assert cmd_instance_list(argparse.Namespace()) == 0
+        assert "running" in capsys.readouterr().out
+    finally:
+        lock.close()
+
+
+def test_instance_dispatch(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("FORGEO_REGISTRY", str(tmp_path / "instances.yaml"))
+    assert cmd_instance(argparse.Namespace(instance_action="list")) == 0
+    assert "No registered instances" in capsys.readouterr().out
+
+
+def test_main_list_alias(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("FORGEO_REGISTRY", str(tmp_path / "instances.yaml"))
+    assert main(["list"]) == 0
+    assert "No registered instances" in capsys.readouterr().out
+
+
+def test_status_resolves_name_from_registry(tmp_path, git_repo, monkeypatch, capsys):
+    monkeypatch.setenv("FORGEO_REGISTRY", str(tmp_path / "instances.yaml"))
+    config_path = write_config(git_repo, tmp_path)
+    assert cmd_instance_add(argparse.Namespace(name="my-repo", config=config_path)) == 0
+
+    assert cmd_status(argparse.Namespace(config=DEFAULT_CONFIG, name="my-repo")) == 0
+    assert "name: test-factory" in capsys.readouterr().out
+
+
+def test_status_unknown_name_exits_nonzero(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("FORGEO_REGISTRY", str(tmp_path / "instances.yaml"))
+    assert cmd_status(argparse.Namespace(config=DEFAULT_CONFIG, name="nope")) == 1
+    assert "Unknown instance" in capsys.readouterr().out
+
+
+def test_once_resolves_name_from_registry(tmp_path, git_repo, monkeypatch, capsys):
+    monkeypatch.setenv("FORGEO_REGISTRY", str(tmp_path / "instances.yaml"))
+    config_path = write_config(git_repo, tmp_path, web_port=0)
+    assert cmd_instance_add(argparse.Namespace(name="my-repo", config=config_path)) == 0
+    fake = FakeFactory()
+    monkeypatch.setattr("factory.cli._make_factory", lambda config: fake)
+
+    assert cmd_once(argparse.Namespace(config=DEFAULT_CONFIG, name="my-repo")) == 0
+    assert fake.cycles == 1
+    assert "Cycle finished: task" in capsys.readouterr().out
+
+
+def test_once_unknown_name_exits_nonzero(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("FORGEO_REGISTRY", str(tmp_path / "instances.yaml"))
+    assert cmd_once(argparse.Namespace(config=DEFAULT_CONFIG, name="nope")) == 1
+    assert "Unknown instance" in capsys.readouterr().out
+
+
+def test_stop_resolves_name_from_registry(tmp_path, git_repo, monkeypatch, capsys):
+    monkeypatch.setenv("FORGEO_REGISTRY", str(tmp_path / "instances.yaml"))
+    config_path = write_config(git_repo, tmp_path)
+    assert cmd_instance_add(argparse.Namespace(name="my-repo", config=config_path)) == 0
+
+    assert cmd_stop(argparse.Namespace(config=DEFAULT_CONFIG, name="my-repo")) == 1
+    assert "not running" in capsys.readouterr().out
+
+
+def test_restart_resolves_name_from_registry(tmp_path, git_repo, monkeypatch, capsys):
+    monkeypatch.setenv("FORGEO_REGISTRY", str(tmp_path / "instances.yaml"))
+    config_path = write_config(git_repo, tmp_path, web_port=0, interval_minutes=600)
+    assert cmd_instance_add(argparse.Namespace(name="my-repo", config=config_path)) == 0
+
+    assert (
+        cmd_restart(argparse.Namespace(config=DEFAULT_CONFIG, name="my-repo", timeout=30.0))
+        == 0
+    )
+    try:
+        out = capsys.readouterr().out
+        assert "restarted" in out
+        assert "interval 600 min" in out
+        assert is_lock_held(tmp_path / "backlog.lock")
+    finally:
+        cmd_stop(stop_args(config_path))
+
+
+def test_two_instances_stay_fully_independent(
+    git_repo, tmp_path, monkeypatch, capsys
+):
+    """Two registered instances with configs in different directories keep every
+    lock file, log, backlog, and runs.jsonl fully independent, and concurrent
+    status/once calls never interfere."""
+    registry = tmp_path / "registry.yaml"
+    monkeypatch.setenv("FORGEO_REGISTRY", str(registry))
+
+    repo_b = tmp_path / "repo-b"
+    repo_b.mkdir()
+    git(repo_b, "init", "-b", "main")
+    git(repo_b, "config", "user.email", "factory@test.local")
+    git(repo_b, "config", "user.name", "Factory Test")
+    (repo_b / "app.py").write_text("def answer():\n    return 0\n", encoding="utf-8")
+    git(repo_b, "add", "-A")
+    git(repo_b, "commit", "-m", "initial")
+
+    dir_a = tmp_path / "inst-a"
+    dir_b = tmp_path / "inst-b"
+    dir_a.mkdir()
+    dir_b.mkdir()
+
+    config_a = write_config_in(
+        dir_a,
+        git_repo,
+        tmp_path,
+        name="inst-a",
+        backlog=dir_a / "backlog.json",
+        blocker_file=dir_a / "BLOCKER.md",
+        web_port=0,
+        interval_minutes=600,
+    )
+    config_b = write_config_in(
+        dir_b,
+        repo_b,
+        tmp_path,
+        name="inst-b",
+        backlog=dir_b / "backlog.json",
+        blocker_file=dir_b / "BLOCKER.md",
+        web_port=0,
+        interval_minutes=600,
+    )
+    assert cmd_instance_add(argparse.Namespace(name="inst-a", config=config_a)) == 0
+    assert cmd_instance_add(argparse.Namespace(name="inst-b", config=config_b)) == 0
+    assert set(list_instances_names()) == {"inst-a", "inst-b"}
+
+    args_a = argparse.Namespace(config=DEFAULT_CONFIG, name="inst-a")
+    args_b = argparse.Namespace(config=DEFAULT_CONFIG, name="inst-b")
+
+    # Lock files are independent: holding A's lock leaves B's lock free.
+    lock_a = acquire_run_lock(dir_a / "backlog.lock")
+    assert lock_a is not None
+    lock_b = acquire_run_lock(dir_b / "backlog.lock")
+    assert lock_b is not None
+    lock_b.close()
+    assert is_lock_held(dir_a / "backlog.lock")
+    assert not is_lock_held(dir_b / "backlog.lock")
+
+    # status --name reports each instance's own daemon state.
+    capsys.readouterr()
+    assert cmd_status(args_a) == 0
+    assert "daemon: running" in capsys.readouterr().out
+    assert cmd_status(args_b) == 0
+    out_b = capsys.readouterr().out
+    assert "name: inst-b" in out_b
+    assert "daemon: not running" in out_b
+    lock_a.close()
+
+    # Backlogs and runs.jsonl stay at each instance's own paths.
+    (dir_a / "backlog.json").write_text(
+        json.dumps(
+            {
+                "tasks": [
+                    {
+                        "id": "A-1",
+                        "title": "Alpha task",
+                        "status": "OPEN",
+                        "created_at": "2026-01-01T00:00:00Z",
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    (dir_b / "backlog.json").write_text(
+        json.dumps(
+            {
+                "tasks": [
+                    {
+                        "id": "B-1",
+                        "title": "Beta task",
+                        "status": "OPEN",
+                        "created_at": "2026-01-01T00:00:00Z",
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    RunRecorder(dir_a / "runs.jsonl").append(
+        RunRecord(
+            started_at=datetime(2026, 8, 1, 1, 0, tzinfo=UTC),
+            finished_at=datetime(2026, 8, 1, 1, 0, 5, tzinfo=UTC),
+            kind=RunKind.TASK,
+            task_id="A-1",
+            task_title="Alpha task",
+            outcome=RunOutcome.SUCCESS,
+            agent_exit_code=0,
+            commit_sha="aaaa",
+            duration_seconds=5.0,
+        )
+    )
+    RunRecorder(dir_b / "runs.jsonl").append(
+        RunRecord(
+            started_at=datetime(2026, 8, 1, 2, 0, tzinfo=UTC),
+            finished_at=datetime(2026, 8, 1, 2, 0, 5, tzinfo=UTC),
+            kind=RunKind.TASK,
+            task_id="B-1",
+            task_title="Beta task",
+            outcome=RunOutcome.ERROR,
+            agent_exit_code=3,
+            duration_seconds=5.0,
+        )
+    )
+
+    assert cmd_status(args_a) == 0
+    out_a = capsys.readouterr().out
+    assert "OPEN=1" in out_a
+    assert "A-1 — Alpha task" in out_a
+    assert "last outcome: SUCCESS" in out_a
+    assert "B-1" not in out_a
+
+    assert cmd_status(args_b) == 0
+    out_b = capsys.readouterr().out
+    assert "OPEN=1" in out_b
+    assert "B-1 — Beta task" in out_b
+    assert "last outcome: ERROR" in out_b
+    assert "A-1" not in out_b
+
+    # Concurrent `factory status --name` subprocesses never interfere.
+    env = {**os.environ, "FORGEO_REGISTRY": str(registry)}
+    status_procs = [
+        subprocess.Popen(
+            [sys.executable, "-m", "factory", "status", "--name", "inst-a"],
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        ),
+        subprocess.Popen(
+            [sys.executable, "-m", "factory", "status", "--name", "inst-b"],
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        ),
+    ]
+    status_outputs: list[str] = []
+    for proc in status_procs:
+        out, err = proc.communicate(timeout=30)
+        assert proc.returncode == 0, f"status failed: {err}\n{out}"
+        status_outputs.append(out)
+    assert "inst-a" in status_outputs[0] and "A-1" in status_outputs[0]
+    assert "B-1" not in status_outputs[0]
+    assert "inst-b" in status_outputs[1] and "B-1" in status_outputs[1]
+    assert "A-1" not in status_outputs[1]
+
+    # Concurrent `factory once --name` cycles run on separate locks/repos.
+    cycle_procs = [
+        subprocess.Popen(
+            [sys.executable, "-m", "factory", "once", "--name", "inst-a"],
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        ),
+        subprocess.Popen(
+            [sys.executable, "-m", "factory", "once", "--name", "inst-b"],
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        ),
+    ]
+    for proc in cycle_procs:
+        out, err = proc.communicate(timeout=90)
+        assert proc.returncode == 0, f"once failed: {err}\n{out}"
+
+    # Each instance's log, backlog, and runs.jsonl were updated independently.
+    log_a = (dir_a / "factory.log").read_text(encoding="utf-8")
+    log_b = (dir_b / "factory.log").read_text(encoding="utf-8")
+    assert str(config_a.resolve()) in log_a
+    assert str(config_b.resolve()) in log_b
+    assert str(config_b.resolve()) not in log_a
+    assert str(config_a.resolve()) not in log_b
+
+    backlog_a = json.loads((dir_a / "backlog.json").read_text(encoding="utf-8"))
+    backlog_b = json.loads((dir_b / "backlog.json").read_text(encoding="utf-8"))
+    assert [task["id"] for task in backlog_a["tasks"]] == ["A-1"]
+    assert [task["id"] for task in backlog_b["tasks"]] == ["B-1"]
+    assert backlog_a["tasks"][0]["status"] == "COMPLETED"
+    assert backlog_b["tasks"][0]["status"] == "COMPLETED"
+
+    runs_a = RunRecorder(dir_a / "runs.jsonl").read()
+    runs_b = RunRecorder(dir_b / "runs.jsonl").read()
+    assert any(record.task_id == "A-1" for record in runs_a)
+    assert any(record.task_id == "B-1" for record in runs_b)
+    assert all(record.task_id in (None, "A-1") for record in runs_a)
+    assert all(record.task_id in (None, "B-1") for record in runs_b)
+
+    # The registry now lists both instances.
+    infos = list_instances()
+    assert {info.name for info in infos} == {"inst-a", "inst-b"}
+
+
+def list_instances_names() -> list[str]:
+    return [info.name for info in list_instances()]

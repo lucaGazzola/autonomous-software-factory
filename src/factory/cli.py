@@ -21,12 +21,24 @@ Commands:
    (SIGTERM; a cycle in progress finishes first).
 * ``factory restart --config factory.yaml`` — stop the daemon when running,
    then start it again detached in the background, re-reading the config.
+* ``factory instance add NAME --config PATH`` — register an existing
+   ``factory.yaml`` under a stable instance name.
+* ``factory instance rm NAME`` — unregister an instance (never touches its
+   config file or repository).
+* ``factory instance list`` / ``factory list`` — a table of every registered
+   instance: config path, repository, daemon state, last outcome, and
+   backlog counts.
+
+``start``, ``once``, ``status``, ``stop`` and ``restart`` each accept either
+``--config PATH`` (a config file) or ``--name NAME`` (an instance resolved
+from the registry); the two options are mutually exclusive.
 """
 
 from __future__ import annotations
 
 import argparse
 import asyncio
+import io
 import logging
 import os
 import signal
@@ -39,9 +51,11 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any
 
+import yaml
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Confirm
+from rich.table import Table
 
 from factory import __version__
 from factory.agent import DockerSandboxAgent, SandboxUnavailableError, ShellAgent
@@ -50,6 +64,13 @@ from factory.config import load_config
 from factory.daemon import FactoryDaemon, acquire_run_lock, is_lock_held, read_lock_pid
 from factory.factory import Factory
 from factory.git import GitManager
+from factory.instances import (
+    InstanceInfo,
+    add_instance,
+    list_instances,
+    remove_instance,
+    resolve_instance,
+)
 from factory.models import FactoryConfig, SandboxMode, Task, TaskStatus
 from factory.runs import RunRecorder, runs_path_for
 from factory.server import WebServer
@@ -88,12 +109,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     start_parser = sub.add_parser("start", help="Start the scheduled factory for a repository.")
-    start_parser.add_argument(
-        "--config",
-        type=Path,
-        default=DEFAULT_CONFIG,
-        help="Factory YAML file (default: factory.yaml).",
-    )
+    _add_config_or_name(start_parser)
     start_parser.add_argument(
         "--interval-minutes",
         type=int,
@@ -102,34 +118,19 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     once_parser = sub.add_parser("once", help="Run exactly one factory cycle and exit.")
-    once_parser.add_argument(
-        "--config",
-        type=Path,
-        default=DEFAULT_CONFIG,
-        help="Factory YAML file (default: factory.yaml).",
-    )
+    _add_config_or_name(once_parser)
 
     status_parser = sub.add_parser(
         "status",
         help="Print a read-only summary of the factory (never starts an agent).",
     )
-    status_parser.add_argument(
-        "--config",
-        type=Path,
-        default=DEFAULT_CONFIG,
-        help="Factory YAML file (default: factory.yaml).",
-    )
+    _add_config_or_name(status_parser)
 
     stop_parser = sub.add_parser(
         "stop",
         help="Stop a running factory daemon gracefully (SIGTERM).",
     )
-    stop_parser.add_argument(
-        "--config",
-        type=Path,
-        default=DEFAULT_CONFIG,
-        help="Factory YAML file (default: factory.yaml).",
-    )
+    _add_config_or_name(stop_parser)
     stop_parser.add_argument(
         "--timeout",
         type=float,
@@ -142,12 +143,7 @@ def build_parser() -> argparse.ArgumentParser:
         "restart",
         help="Restart the factory daemon in the background, re-reading the config.",
     )
-    restart_parser.add_argument(
-        "--config",
-        type=Path,
-        default=DEFAULT_CONFIG,
-        help="Factory YAML file (default: factory.yaml).",
-    )
+    _add_config_or_name(restart_parser)
     restart_parser.add_argument(
         "--timeout",
         type=float,
@@ -155,7 +151,62 @@ def build_parser() -> argparse.ArgumentParser:
         help="Seconds to wait for the old daemon to exit (default: 600); a "
         "cycle in progress always finishes first.",
     )
+
+    instance_parser = sub.add_parser(
+        "instance",
+        help="Register, list, and unregister named factory instances.",
+    )
+    instance_sub = instance_parser.add_subparsers(dest="instance_action")
+
+    instance_add_parser = instance_sub.add_parser(
+        "add", help="Register an existing factory.yaml under a stable name."
+    )
+    instance_add_parser.add_argument(
+        "name", help="Unique instance name (must match ^[a-zA-Z0-9._-]+$)."
+    )
+    instance_add_parser.add_argument(
+        "--config",
+        type=Path,
+        required=True,
+        help="Path to the factory.yaml to register.",
+    )
+
+    instance_rm_parser = instance_sub.add_parser("rm", help="Unregister an instance.")
+    instance_rm_parser.add_argument("name", help="Instance name to unregister.")
+
+    instance_sub.add_parser(
+        "list", help="List every registered instance and its state."
+    )
+
+    sub.add_parser(
+        "list",
+        help="List every registered instance (alias for `factory instance list`).",
+    )
     return parser
+
+
+def _add_config_or_name(
+    parser: argparse.ArgumentParser, *, default_config: Path = DEFAULT_CONFIG
+) -> None:
+    """Add a mutually-exclusive ``--config``/``--name`` option pair.
+
+    ``--config`` keeps its default so plain ``factory start`` (etc.) keeps
+    resolving to ``factory.yaml``; argparse still rejects explicitly passing
+    both options together.
+    """
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument(
+        "--config",
+        type=Path,
+        default=default_config,
+        help="Factory YAML file (default: factory.yaml).",
+    )
+    group.add_argument(
+        "--name",
+        default=None,
+        help="Registered instance name resolved from the registry "
+        "(see `factory instance`).",
+    )
 
 
 def setup_logging(log_file: str | Path) -> None:
@@ -185,20 +236,43 @@ def _offer_setup(config_path: Path) -> bool:
     return run_setup(base_dir=config_path.parent.resolve(), config_path=config_path) is not None
 
 
+def _resolved_config_path(args: argparse.Namespace) -> Path | None:
+    """Resolve the config path: ``--name`` from the registry, else ``--config``.
+
+    Prints an error and returns ``None`` when the instance name is not
+    registered.
+    """
+    name = getattr(args, "name", None)
+    if name is None:
+        return Path(args.config)
+    config_path = resolve_instance(name)
+    if config_path is None:
+        console.print(
+            f"[red]Unknown instance: {name}. Register it with "
+            f"`factory instance add {name} --config PATH`.[/red]"
+        )
+        return None
+    return config_path
+
+
 def _resolve_config(args: argparse.Namespace) -> FactoryConfig | None:
     """Load the config, offering the guided setup when missing.
 
-    Applies the optional ``interval_minutes`` override. Returns ``None``
-    when no config can be produced.
+    Resolves ``--name`` through the instance registry. Applies the optional
+    ``interval_minutes`` override. Returns ``None`` when no config can be
+    produced.
     """
-    if not args.config.exists():
-        console.print(f"[yellow]Config file not found: {args.config}[/yellow]")
-        if not _offer_setup(args.config):
+    config_path = _resolved_config_path(args)
+    if config_path is None:
+        return None
+    if not config_path.exists():
+        console.print(f"[yellow]Config file not found: {config_path}[/yellow]")
+        if not _offer_setup(config_path):
             console.print(
                 "[yellow]Create one with `factory init`, or pass --config <file>.[/yellow]"
             )
             return None
-    config = load_config(args.config)
+    config = load_config(config_path)
     interval = getattr(args, "interval_minutes", None)
     if interval is not None:
         config = config.model_copy(update={"interval_minutes": interval})
@@ -263,12 +337,15 @@ def _prepare_worker(
     error) when any step fails; on success the caller owns the lock and must
     close it.
     """
+    config_path = _resolved_config_path(args)
+    if config_path is None:
+        return None
     config = _resolve_config(args)
     if config is None:
         return None
     setup_logging(config.log_file)
     log = logging.getLogger("factory.cli")
-    log.info("Loading factory config from %s", args.config)
+    log.info("Loading factory config from %s", config_path)
     lock = _acquire_run_lock(config)
     if lock is None:
         return None
@@ -419,7 +496,10 @@ def _load_config_or_error(config_path: Path) -> FactoryConfig | None:
 
 def cmd_status(args: argparse.Namespace) -> int:
     """Handle ``factory status``: read-only summary; never starts an agent."""
-    config = _load_config_or_error(args.config)
+    config_path = _resolved_config_path(args)
+    if config_path is None:
+        return 1
+    config = _load_config_or_error(config_path)
     if config is None:
         return 1
     tasks = asyncio.run(JSONBacklog(config.backlog).list_tasks())
@@ -483,7 +563,10 @@ def _stop_daemon(config: FactoryConfig, timeout: float) -> bool:
 
 def cmd_stop(args: argparse.Namespace) -> int:
     """Handle ``factory stop``: graceful daemon shutdown via SIGTERM."""
-    config = _load_config_or_error(args.config)
+    config_path = _resolved_config_path(args)
+    if config_path is None:
+        return 1
+    config = _load_config_or_error(config_path)
     if config is None:
         return 1
     if not is_lock_held(config.backlog.with_suffix(".lock")):
@@ -494,14 +577,17 @@ def cmd_stop(args: argparse.Namespace) -> int:
 
 def cmd_restart(args: argparse.Namespace) -> int:
     """Handle ``factory restart``: stop when running, then start detached."""
-    config = _load_config_or_error(args.config)
+    config_path = _resolved_config_path(args)
+    if config_path is None:
+        return 1
+    config = _load_config_or_error(config_path)
     if config is None:
         return 1
     lock_path = config.backlog.with_suffix(".lock")
     if is_lock_held(lock_path) and not _stop_daemon(config, args.timeout):
         return 1
     proc = subprocess.Popen(
-        [sys.executable, "-m", "factory", "start", "--config", str(args.config)],
+        [sys.executable, "-m", "factory", "start", "--config", str(config_path)],
         stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
@@ -532,6 +618,93 @@ def cmd_default() -> int:
     return cmd_init(argparse.Namespace(config=DEFAULT_CONFIG, force=False))
 
 
+def cmd_instance_add(args: argparse.Namespace) -> int:
+    """Handle ``factory instance add``: register an existing factory.yaml."""
+    try:
+        add_instance(args.name, args.config)
+    except (ValueError, FileNotFoundError, yaml.YAMLError) as exc:
+        console.print(f"[red]{exc}[/red]")
+        return 1
+    console.print(
+        f"[green]Registered instance {args.name!r} -> {args.config.resolve()}.[/green]"
+    )
+    return 0
+
+
+def cmd_instance_rm(args: argparse.Namespace) -> int:
+    """Handle ``factory instance rm``: unregister without touching the repo."""
+    if remove_instance(args.name):
+        console.print(f"[green]Unregistered instance {args.name!r}.[/green]")
+        return 0
+    console.print(f"[red]Unknown instance: {args.name}[/red]")
+    return 1
+
+
+def _instance_row(info: InstanceInfo) -> tuple[str, ...]:
+    """Render one instance's table row (name, config, repo, daemon, outcome, backlog)."""
+    if info.config is None:
+        return (
+            info.name,
+            str(info.config_path),
+            "(unavailable)",
+            "stopped",
+            "(none)",
+            "—",
+        )
+    tasks = asyncio.run(JSONBacklog(info.config.backlog).list_tasks())
+    counts = backlog_status_counts(tasks)
+    counts_text = " ".join(f"{status}={counts[status]}" for status in counts)
+    last_outcome = last_outcome_from_runs(info.config) or "(none)"
+    return (
+        info.name,
+        str(info.config_path),
+        str(info.repo),
+        "running" if info.daemon_running else "stopped",
+        last_outcome,
+        counts_text,
+    )
+
+
+def cmd_instance_list(args: argparse.Namespace) -> int:
+    """Handle ``factory instance list`` / ``factory list``."""
+    infos = list_instances()
+    if not infos:
+        console.print("[yellow]No registered instances.[/yellow]")
+        console.print(
+            "[yellow]Register one with `factory instance add NAME --config PATH`.[/yellow]"
+        )
+        return 0
+    table = Table(title="Forgeo instances")
+    for column in ("Name", "Config", "Repo", "Daemon", "Last outcome", "Backlog"):
+        table.add_column(column, overflow="fold")
+    for info in infos:
+        table.add_row(*_instance_row(info))
+    # Size the console to the table's natural width so long config/repo paths
+    # are never truncated or folded mid-string; a wide terminal output simply
+    # wraps at the user's screen edge while keeping every field intact.
+    buffer = io.StringIO()
+    probe = Console(file=buffer, width=100_000)
+    probe.print(table)
+    natural = max(
+        (len(line) for line in buffer.getvalue().splitlines()), default=80
+    )
+    Console(width=natural + 4).print(table)
+    return 0
+
+
+def cmd_instance(args: argparse.Namespace) -> int:
+    """Handle ``factory instance``: the registry subcommand group."""
+    action = args.instance_action
+    if action == "add":
+        return cmd_instance_add(args)
+    if action == "rm":
+        return cmd_instance_rm(args)
+    if action == "list":
+        return cmd_instance_list(args)
+    build_parser().print_help()
+    return 0
+
+
 _COMMANDS: dict[str, Callable[[argparse.Namespace], int]] = {
     "start": cmd_start,
     "once": cmd_once,
@@ -539,6 +712,8 @@ _COMMANDS: dict[str, Callable[[argparse.Namespace], int]] = {
     "status": cmd_status,
     "stop": cmd_stop,
     "restart": cmd_restart,
+    "instance": cmd_instance,
+    "list": cmd_instance_list,
 }
 
 
