@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `factory web [--host HOST] [--port PORT]` — a standalone central dashboard
+  (default `0.0.0.0:8790`, foreground like `factory start`) that aggregates
+  every registered instance. It reads each instance's data straight from its
+  files (`backlog.json`, `runs.jsonl`, `factory.log`, `BLOCKER.md`), so it
+  works whether or not that instance's daemon is running. Home page at `/`,
+  per-instance pages at `/instances/<name>/` (kanban backlog plus logs,
+  runs, blocker and config tabs), and a per-instance API under
+  `/api/instances/<name>/` mirroring the embedded daemon's endpoints.
+- Shared web-server helpers (`factory.web_common`) used by both the embedded
+  per-daemon dashboard and the central dashboard.
+
 ## [0.2.1] - 2026-08-05
 
 ### Added

@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Forgeo &middot; Instance</title>
+<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/central/central.css">
+</head>
+<body data-page="instance">
+<div class="shell">
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-dot" aria-hidden="true"></span>
+      <span class="brand-name" id="factory-name">Instance</span>
+    </div>
+    <dl class="meta">
+      <div class="meta-item">
+        <dt>daemon</dt>
+        <dd><span class="daemon-badge" id="meta-daemon">&mdash;</span></dd>
+      </div>
+      <div class="meta-item">
+        <dt>repo</dt>
+        <dd id="meta-repo">&mdash;</dd>
+      </div>
+      <div class="meta-item">
+        <dt>interval</dt>
+        <dd id="meta-interval">&mdash;</dd>
+      </div>
+      <div class="meta-item">
+        <dt>next run</dt>
+        <dd id="meta-next">&mdash;</dd>
+      </div>
+      <div class="meta-item">
+        <dt>last outcome</dt>
+        <dd id="meta-outcome">&mdash;</dd>
+      </div>
+    </dl>
+  </header>
+
+  <nav class="tabs" id="tabs">
+    <button class="tab is-active" data-tab="backlog" type="button">Backlog</button>
+    <button class="tab" data-tab="logs" type="button">Logs</button>
+    <button class="tab" data-tab="runs" type="button">Runs</button>
+    <button class="tab" data-tab="blocker" type="button">Blocker</button>
+    <button class="tab" data-tab="config" type="button">Config</button>
+  </nav>
+
+  <main id="tab-backlog" class="tab-panel board" aria-live="polite">
+    <div class="empty-state" id="empty-state" hidden>
+      <p class="empty-title">No tasks</p>
+      <p class="empty-sub">The backlog is empty. The factory will run a refactoring pass until a task lands.</p>
+    </div>
+  </main>
+  <main id="tab-logs" class="tab-panel" hidden>
+    <pre class="code-panel" id="logs-body">(loading &hellip;)</pre>
+  </main>
+  <main id="tab-runs" class="tab-panel" hidden>
+    <div class="table-wrap" id="runs-body"></div>
+  </main>
+  <main id="tab-blocker" class="tab-panel" hidden>
+    <pre class="code-panel" id="blocker-body">(loading &hellip;)</pre>
+  </main>
+  <main id="tab-config" class="tab-panel" hidden>
+    <pre class="code-panel" id="config-body">(loading &hellip;)</pre>
+  </main>
+
+  <footer class="footerbar">
+    <a class="footer-link" href="/">&larr; all instances</a>
+    <span class="notice" id="daemon-notice" hidden>daemon not reachable &mdash; retrying every 30s</span>
+    <span class="fetch-time">fetch <time id="fetch-time">never</time></span>
+  </footer>
+
+</div>
+<script src="/central/central.js"></script>
+</body>
+</html>

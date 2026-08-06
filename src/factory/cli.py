@@ -28,6 +28,9 @@ Commands:
 * ``factory instance list`` / ``factory list`` — a table of every registered
    instance: config path, repository, daemon state, last outcome, and
    backlog counts.
+* ``factory web [--host HOST] [--port PORT]`` — serve the central
+   multi-instance dashboard in the foreground (default ``0.0.0.0:8790``),
+   aggregating every registered instance straight from its files.
 
 ``start``, ``once``, ``status``, ``stop`` and ``restart`` each accept either
 ``--config PATH`` (a config file) or ``--name NAME`` (an instance resolved
@@ -45,7 +48,6 @@ import signal
 import subprocess
 import sys
 import time
-from collections import Counter
 from collections.abc import Callable
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -59,7 +61,8 @@ from rich.table import Table
 
 from factory import __version__
 from factory.agent import DockerSandboxAgent, SandboxUnavailableError, ShellAgent
-from factory.backlog import JSONBacklog, oldest_open_task
+from factory.backlog import JSONBacklog, backlog_status_counts, oldest_open_task
+from factory.central import DEFAULT_HOST, DEFAULT_PORT
 from factory.config import load_config
 from factory.daemon import FactoryDaemon, acquire_run_lock, is_lock_held, read_lock_pid
 from factory.factory import Factory
@@ -71,7 +74,7 @@ from factory.instances import (
     remove_instance,
     resolve_instance,
 )
-from factory.models import FactoryConfig, SandboxMode, Task, TaskStatus
+from factory.models import FactoryConfig, SandboxMode, Task
 from factory.runs import RunRecorder, runs_path_for
 from factory.server import WebServer
 from factory.setup import run_setup
@@ -181,6 +184,22 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser(
         "list",
         help="List every registered instance (alias for `factory instance list`).",
+    )
+
+    web_parser = sub.add_parser(
+        "web",
+        help="Serve the central multi-instance dashboard in the foreground.",
+    )
+    web_parser.add_argument(
+        "--host",
+        default=DEFAULT_HOST,
+        help=f"Bind address (default: {DEFAULT_HOST}).",
+    )
+    web_parser.add_argument(
+        "--port",
+        type=int,
+        default=DEFAULT_PORT,
+        help=f"Bind port (default: {DEFAULT_PORT}).",
     )
     return parser
 
@@ -437,13 +456,6 @@ def cmd_init(args: argparse.Namespace) -> int:
         console.print("[yellow]Setup aborted; nothing was written.[/yellow]")
         return 130
     return 0
-
-
-def backlog_status_counts(tasks: list[Task]) -> dict[str, int]:
-    """Count tasks by status; always includes every known status key."""
-    counts = {status.value: 0 for status in TaskStatus}
-    counts.update(Counter(task.status.value for task in tasks))
-    return counts
 
 
 def last_outcome_from_runs(config: FactoryConfig) -> str | None:
@@ -705,6 +717,17 @@ def cmd_instance(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_web(args: argparse.Namespace) -> int:
+    """Handle ``factory web``: the central multi-instance dashboard.
+
+    Runs in the foreground like ``factory start``, serving an aggregate view
+    of every registered instance straight from each instance's files.
+    """
+    from factory.central import run_foreground
+
+    return run_foreground(host=args.host, port=args.port)
+
+
 _COMMANDS: dict[str, Callable[[argparse.Namespace], int]] = {
     "start": cmd_start,
     "once": cmd_once,
@@ -714,6 +737,7 @@ _COMMANDS: dict[str, Callable[[argparse.Namespace], int]] = {
     "restart": cmd_restart,
     "instance": cmd_instance,
     "list": cmd_instance_list,
+    "web": cmd_web,
 }
 
 

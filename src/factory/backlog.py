@@ -13,6 +13,7 @@ import json
 import logging
 import os
 import tempfile
+from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -30,6 +31,13 @@ def oldest_open_task(tasks: list[Task]) -> Task | None:
     if not open_tasks:
         return None
     return min(open_tasks, key=lambda task: task.created_at)
+
+
+def backlog_status_counts(tasks: list[Task]) -> dict[str, int]:
+    """Count tasks by status; always includes every known status key."""
+    counts = {status.value: 0 for status in TaskStatus}
+    counts.update(Counter(task.status.value for task in tasks))
+    return counts
 
 
 class JSONBacklog:

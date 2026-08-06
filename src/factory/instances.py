@@ -147,6 +147,19 @@ def _load_info(name: str, config_path: Path) -> InstanceInfo:
     )
 
 
+def get_instance(name: str) -> InstanceInfo | None:
+    """Build the live state for one registered instance, or ``None``.
+
+    Equivalent to looking up a single entry of :func:`list_instances`; an
+    instance whose config can no longer be loaded is still returned, with
+    ``repo=None``, ``daemon_running=False`` and ``config=None``.
+    """
+    config_path = resolve_instance(name)
+    if config_path is None:
+        return None
+    return _load_info(name, config_path)
+
+
 def list_instances() -> list[InstanceInfo]:
     """Return every registered instance, sorted by name.
 

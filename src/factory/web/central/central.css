@@ -1,0 +1,267 @@
+/* Extra component styles for the central dashboard (home + instance pages).
+   The dark theme, board, status columns and task cards come from style.css. */
+
+/* ---------- Instance list (home) ---------- */
+
+.instance-list {
+  flex: 1;
+  padding: 32px 0 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.instance-card {
+  display: block;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  color: var(--text);
+  transition: transform 0.15s ease, border-color 0.18s ease, background 0.18s ease;
+}
+
+.instance-card:hover {
+  transform: translateY(-1px);
+  background: var(--surface-hover);
+  border-color: var(--border-strong);
+}
+
+.instance-card__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.instance-card__name {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.instance-card__grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.instance-card__info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.instance-card__label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text-faint);
+}
+
+.instance-card__value {
+  font-size: 13px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.instance-card__counts {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.count-chip {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.count-chip--OPEN {
+  color: var(--open);
+  background: rgba(143, 183, 255, 0.1);
+  border-color: transparent;
+}
+.count-chip--BLOCKED {
+  color: var(--blocked);
+  background: rgba(240, 168, 77, 0.16);
+  border-color: transparent;
+}
+.count-chip--COMPLETED {
+  color: var(--completed);
+  background: rgba(111, 206, 147, 0.1);
+  border-color: transparent;
+}
+.count-chip--FAILED {
+  color: var(--failed);
+  background: rgba(224, 108, 117, 0.1);
+  border-color: transparent;
+}
+
+/* ---------- Daemon badge (instance page header) ---------- */
+
+.daemon-badge {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 3px 9px;
+  border-radius: 999px;
+  white-space: nowrap;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+
+.daemon-badge--running {
+  color: var(--completed);
+  background: rgba(111, 206, 147, 0.1);
+  border-color: rgba(111, 206, 147, 0.35);
+}
+
+.daemon-badge--stopped {
+  color: var(--failed);
+  background: rgba(224, 108, 117, 0.1);
+  border-color: rgba(224, 108, 117, 0.35);
+}
+
+/* ---------- Tabs ---------- */
+
+.tabs {
+  display: flex;
+  gap: 6px;
+  padding: 14px 0 0;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+}
+
+.tab {
+  appearance: none;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 10px 14px 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.tab:hover {
+  color: var(--text);
+}
+
+.tab.is-active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+.tab-panel {
+  flex: 1;
+  padding: 20px 0 40px;
+}
+
+.tab-panel[hidden] {
+  display: none;
+}
+
+/* ---------- Code panels (logs / blocker / config) ---------- */
+
+.code-panel {
+  margin: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 70vh;
+  overflow: auto;
+}
+
+/* ---------- Run table ---------- */
+
+.table-wrap {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: auto;
+}
+
+.run-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.run-table th,
+.run-table td {
+  text-align: left;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.run-table th {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text-faint);
+}
+
+.run-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.run-table tbody tr:hover {
+  background: var(--surface-hover);
+}
+
+.run-table .mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+
+/* ---------- Footer ---------- */
+
+.footer-link {
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.footer-link:hover {
+  text-decoration: underline;
+}
+
+/* ---------- Responsive ---------- */
+
+@media (max-width: 860px) {
+  .instance-card__grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  .instance-card__grid {
+    grid-template-columns: 1fr;
+  }
+}

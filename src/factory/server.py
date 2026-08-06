@@ -8,12 +8,9 @@ continues without the API.
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
-import mimetypes
 import os
 import threading
-from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -23,14 +20,23 @@ from factory.backlog import JSONBacklog
 from factory.daemon import FactoryDaemon
 from factory.models import FactoryConfig
 from factory.runs import RunRecorder, runs_path_for
+from factory.web_common import (
+    DEFAULT_LOG_LINES,
+    DEFAULT_RUN_LIMIT,
+    MAX_LOG_LINES,
+    MAX_RUN_LIMIT,
+    WEB_ROOT,
+    clamp_query_int,
+    guess_content_type,
+    iso,
+    json_bytes,
+    safe_static_path,
+    tail_lines,
+)
+
+__all__ = ["WEB_ROOT", "ApiState", "WebServer"]
 
 logger = logging.getLogger(__name__)
-
-WEB_ROOT = Path(__file__).resolve().parent / "web"
-DEFAULT_LOG_LINES = 100
-MAX_LOG_LINES = 10_000
-DEFAULT_RUN_LIMIT = 10
-MAX_RUN_LIMIT = 10_000
 
 
 class ApiState:
@@ -48,55 +54,6 @@ class ApiState:
         self.loop: asyncio.AbstractEventLoop | None = None
 
 
-def _json_bytes(payload: Any) -> bytes:
-    return json.dumps(payload, indent=2, default=str).encode("utf-8") + b"\n"
-
-
-def _tail_lines(path: Path, n: int) -> list[str]:
-    if n <= 0 or not path.exists():
-        return []
-    try:
-        text = path.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return []
-    lines = text.splitlines()
-    if n >= len(lines):
-        return lines
-    return lines[-n:]
-
-
-def _clamp_query_int(
-    query: dict[str, list[str]], key: str, default: int, maximum: int
-) -> int:
-    """Parse a bounded non-negative integer from a query parameter."""
-    raw = query.get(key, [str(default)])[0]
-    try:
-        value = int(raw)
-    except ValueError:
-        value = default
-    return max(0, min(value, maximum))
-
-
-def _safe_static_path(url_path: str) -> Path | None:
-    """Resolve a URL path under :data:`WEB_ROOT`, rejecting traversal."""
-    rel = unquote(url_path).lstrip("/")
-    if not rel:
-        rel = "index.html"
-    elif rel.endswith("/"):
-        rel = rel + "index.html"
-    root = WEB_ROOT.resolve()
-    if not root.is_dir():
-        return None
-    candidate = (root / rel).resolve()
-    try:
-        candidate.relative_to(root)
-    except ValueError:
-        return None
-    if candidate.is_file():
-        return candidate
-    return None
-
-
 def make_handler(state: ApiState) -> type[BaseHTTPRequestHandler]:
     """Build a request-handler class bound to ``state``."""
 
@@ -105,7 +62,7 @@ def make_handler(state: ApiState) -> type[BaseHTTPRequestHandler]:
             logger.debug("web %s - %s", self.address_string(), format % args)
 
         def _send_json(self, status: int, payload: Any) -> None:
-            body = _json_bytes(payload)
+            body = json_bytes(payload)
             self.send_response(status)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
@@ -155,12 +112,12 @@ def make_handler(state: ApiState) -> type[BaseHTTPRequestHandler]:
                     self._send_json(200, state.config.model_dump(mode="json"))
                     return
                 if path == "/api/logs":
-                    n = _clamp_query_int(query, "lines", DEFAULT_LOG_LINES, MAX_LOG_LINES)
-                    lines = _tail_lines(Path(state.config.log_file), n)
+                    n = clamp_query_int(query, "lines", DEFAULT_LOG_LINES, MAX_LOG_LINES)
+                    lines = tail_lines(Path(state.config.log_file), n)
                     self._send_json(200, {"lines": lines})
                     return
                 if path == "/api/runs":
-                    n = _clamp_query_int(query, "limit", DEFAULT_RUN_LIMIT, MAX_RUN_LIMIT)
+                    n = clamp_query_int(query, "limit", DEFAULT_RUN_LIMIT, MAX_RUN_LIMIT)
                     records = RunRecorder(runs_path_for(state.backlog.path)).read(limit=n)
                     self._send_json(200, [r.model_dump(mode="json") for r in records])
                     return
@@ -177,10 +134,10 @@ def make_handler(state: ApiState) -> type[BaseHTTPRequestHandler]:
                     self._send_json(200, {"content": content})
                     return
 
-                static = _safe_static_path(path)
+                static = safe_static_path(path)
                 if static is not None:
                     data = static.read_bytes()
-                    ctype = mimetypes.guess_type(str(static))[0] or "application/octet-stream"
+                    ctype = guess_content_type(static)
                     self._send_bytes(200, data, ctype)
                     return
                 self._send_json(404, {"error": "not found"})
@@ -195,7 +152,7 @@ def make_handler(state: ApiState) -> type[BaseHTTPRequestHandler]:
             last_outcome = daemon.last_outcome if daemon is not None else None
             next_run: str | None = None
             if daemon is not None and daemon.next_run_at is not None:
-                next_run = _iso(daemon.next_run_at)
+                next_run = iso(daemon.next_run_at)
             return {
                 "pid": pid,
                 "name": state.config.name,
@@ -205,12 +162,6 @@ def make_handler(state: ApiState) -> type[BaseHTTPRequestHandler]:
             }
 
     return FactoryRequestHandler
-
-
-def _iso(value: datetime) -> str:
-    if value.tzinfo is None:
-        return value.isoformat() + "Z"
-    return value.isoformat()
 
 
 class WebServer:

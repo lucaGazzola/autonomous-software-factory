@@ -120,6 +120,27 @@ Stop the daemon when running, then start it again **in the background**
 
 On success it prints the new daemon PID and interval.
 
+## `factory web`
+
+Serve the **central multi-instance dashboard** in the foreground (like
+`factory start`): one read-only page that aggregates every registered
+instance. It reads each instance's data straight from its files
+(`backlog.json`, `runs.jsonl`, `factory.log`, `BLOCKER.md`), so it works
+whether or not each instance's daemon is running.
+
+| Flag | Description |
+| --- | --- |
+| `--host <address>` | Bind address (default `0.0.0.0`). |
+| `--port <port>` | Bind port (default `8790`). |
+
+- `GET /` — home page listing every registered instance (daemon state, last
+  outcome, next run, backlog counts).
+- `GET /instances/<name>/` — one instance's page: its kanban backlog plus
+  tabs for logs, runs, blocker, and config.
+
+See [Web console & HTTP API](web-console-api.md) for the full API and the
+per-daemon dashboard served by `factory start`.
+
 ## Process checks
 
 ```bash
