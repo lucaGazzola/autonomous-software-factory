@@ -93,6 +93,19 @@ curl http://127.0.0.1:8787/api/logs
 curl "http://127.0.0.1:8787/api/logs?lines=50"
 ```
 
+### `GET /api/runs?limit=N`
+
+The durable run history from `runs.jsonl`, newest first (`limit` defaults to
+`10`, max `10000`). Each record has started/finished timestamps, the run kind
+(`task` or `refactor`), the task id and title when applicable, the outcome
+(`SUCCESS` / `BLOCKED` / `ERROR`), the agent exit code, the commit SHA when a
+commit was created, and the duration in seconds.
+
+```bash
+curl http://127.0.0.1:8787/api/runs
+curl "http://127.0.0.1:8787/api/runs?limit=5"
+```
+
 ### `GET /api/blocker`
 
 The current `BLOCKER.md` contents, or `{"content": null}` when no blocker file

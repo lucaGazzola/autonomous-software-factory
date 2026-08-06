@@ -153,6 +153,51 @@ Both `telegram_bot_token` **and** `telegram_chat_id` must be set for blocked
 run notifications. A notification failure never changes the outcome of a
 cycle — it is logged as a warning.
 
+## Instance registry
+
+Several factories can run side by side — one config per repository, each a
+separate daemon. The **instance registry** maps a stable instance name to the
+absolute path of that instance's `factory.yaml`, so the CLI can resolve a
+config by name (`--name`) and a single command can enumerate every factory on
+the host (`factory list` / `factory instance list`).
+
+- **Location**: the file at `$FORGEO_REGISTRY`, or
+  `~/.config/forgeo/instances.yaml` when the variable is unset.
+- **Format**: a YAML mapping of instance name → absolute path of that
+  instance's `factory.yaml`:
+
+  ```yaml
+  site-a: /home/me/projects/site-a/factory.yaml
+  site-b: /home/me/projects/site-b/factory.yaml
+  ```
+
+- The file is created on the first `factory instance add`; a missing file
+  reads as an empty registry. Writes are atomic (temp file + rename), so a
+  crash mid-write never corrupts it.
+- Names must match `^[a-zA-Z0-9._-]+$`; duplicates and unknown names are
+  rejected with a clear error.
+- `factory instance rm NAME` unregisters without touching the config file or
+  the repository.
+
+Manage instances with `factory instance add|rm|list` and `factory list` — see
+[CLI reference](cli-reference.md).
+
+## Per-instance isolation
+
+Each registered instance is fully independent: every instance owns its own
+**backlog** file, **logs** (`log_file`), **run history** (`runs.jsonl` next
+to the backlog), **locks** (`backlog.lock` and the per-iteration run lock),
+and its own **`web_port`** for the embedded dashboard. Because relative paths
+resolve against each config file's own directory, two configs in different
+directories can never share state.
+
+When two daemons run on the same host and both use the embedded dashboard,
+give each `factory.yaml` a **distinct `web_port`** — they all default to
+`8787`, and a bind failure is logged while the daemon keeps running. The
+central dashboard (`factory web`, default port `8790`) reads every instance's
+data straight from its files, so it works regardless of each daemon's
+`web_port` — see [Web console & HTTP API](web-console-api.md).
+
 ## Default refactor prompt
 
 When `refactor_prompt` is omitted, the factory uses:

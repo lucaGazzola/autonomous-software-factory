@@ -52,9 +52,14 @@ local dashboard at <http://127.0.0.1:8787> while it runs:
 
 One-off commands: `factory once` (single cycle), `factory status` (summary),
 `factory stop`, `factory restart` — every command is in the
-[CLI reference](docs/cli-reference.md). Running several factories? Register
-them with `factory instance add NAME --config PATH` and get one aggregate
-overview at <http://0.0.0.0:8790> with `factory web`.
+[CLI reference](docs/cli-reference.md).
+
+You can run several factories at once, one per repository — each config is
+fully independent (own backlog, logs, locks, `web_port`). Register each
+`factory.yaml` in the instance registry with `factory instance add NAME
+--config PATH`, manage any of them by name with `factory start/status/stop
+--name NAME`, list them all with `factory list`, and get one aggregate
+overview at <http://0.0.0.0:8790> with the central dashboard, `factory web`.
 
 ## Documentation
 

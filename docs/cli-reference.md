@@ -1,7 +1,9 @@
 # CLI reference
 
 All commands read `factory.yaml` from the current directory; pass
-`--config <file>` to use a different one.
+`--config <file>` to use a different one. `start`, `once`, `status`, `stop`
+and `restart` also accept `--name <instance>` to resolve the config from the
+**instance registry** — see [`factory instance`](#factory-instance) below.
 
 ```
 factory --version
@@ -35,7 +37,8 @@ interrupt with Ctrl-C or stop from another terminal with `factory stop`.
 
 | Flag | Description |
 | --- | --- |
-| `--config <file>` | Factory YAML file (default `factory.yaml`). |
+| `--config <file>` | Factory YAML file (default `factory.yaml`). Mutually exclusive with `--name`. |
+| `--name <name>` | Registered instance name resolved from the registry. Mutually exclusive with `--config`. |
 | `--interval-minutes <n>` | Override the schedule interval from the config for this run. |
 
 The daemon wakes every `interval_minutes` and runs one cycle. When no config
@@ -51,7 +54,8 @@ Run exactly **one cycle** and exit; no daemon needed.
 
 | Flag | Description |
 | --- | --- |
-| `--config <file>` | Factory YAML file (default `factory.yaml`). |
+| `--config <file>` | Factory YAML file (default `factory.yaml`). Mutually exclusive with `--name`. |
+| `--name <name>` | Registered instance name resolved from the registry. Mutually exclusive with `--config`. |
 
 `factory once` shares the run lock with the daemon, so it never overlaps a
 running `factory start` — useful to test a config or process a backlog without
@@ -75,7 +79,8 @@ Print a read-only summary of the factory. Never starts an agent.
 
 | Flag | Description |
 | --- | --- |
-| `--config <file>` | Factory YAML file (default `factory.yaml`). |
+| `--config <file>` | Factory YAML file (default `factory.yaml`). Mutually exclusive with `--name`. |
+| `--name <name>` | Registered instance name resolved from the registry. Mutually exclusive with `--config`. |
 
 Output:
 
@@ -102,7 +107,8 @@ first).
 
 | Flag | Description |
 | --- | --- |
-| `--config <file>` | Factory YAML file (default `factory.yaml`). |
+| `--config <file>` | Factory YAML file (default `factory.yaml`). Mutually exclusive with `--name`. |
+| `--name <name>` | Registered instance name resolved from the registry. Mutually exclusive with `--config`. |
 | `--timeout <seconds>` | How long to wait for the daemon to exit (default `600`). |
 
 Exit code is `0` on success, `1` when the factory is not running, the lock
@@ -115,10 +121,50 @@ Stop the daemon when running, then start it again **in the background**
 
 | Flag | Description |
 | --- | --- |
-| `--config <file>` | Factory YAML file (default `factory.yaml`). |
+| `--config <file>` | Factory YAML file (default `factory.yaml`). Mutually exclusive with `--name`. |
+| `--name <name>` | Registered instance name resolved from the registry. Mutually exclusive with `--config`. |
 | `--timeout <seconds>` | How long to wait for the old daemon to exit (default `600`). |
 
 On success it prints the new daemon PID and interval.
+
+### `--config` vs `--name`
+
+On `start`, `once`, `status`, `stop` and `restart`, `--name` resolves the
+`factory.yaml` from the instance registry instead of reading `--config`. The
+two flags are mutually exclusive — passing both is an argparse error. An
+unknown instance name prints a clear error and exits non-zero.
+
+## `factory instance`
+
+Register, list, and unregister named factory instances. Instances live in a
+registry file — `$FORGEO_REGISTRY` or `~/.config/forgeo/instances.yaml` — that
+maps each name to the absolute path of its `factory.yaml` (see
+[Configuration](configuration.md#instance-registry)).
+
+### `factory instance add <name> --config <file>`
+
+Register an existing `factory.yaml` under a stable name.
+
+| Flag | Description |
+| --- | --- |
+| `--config <file>` | Path to the `factory.yaml` to register. **Required.** |
+
+- The name must match `^[a-zA-Z0-9._-]+$`; invalid or duplicate names are
+  rejected with a clear error (exit `1`).
+- The config is validated (it must load) before registering.
+- Relative config paths are stored as absolute paths.
+
+### `factory instance rm <name>`
+
+Unregister an instance. Never touches the config file or the repository; a
+missing instance prints an error and exits `1`.
+
+### `factory instance list` / `factory list`
+
+List every registered instance as a table: name, config path, repository,
+daemon state (running/stopped), last outcome (from `runs.jsonl`), and backlog
+counts. `factory list` is a direct alias for `factory instance list`. With no
+registered instances it prints a hint and exits `0`.
 
 ## `factory web`
 

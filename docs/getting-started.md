@@ -101,6 +101,41 @@ daemon up:
 factory once
 ```
 
+## 6. Multiple repositories / instances
+
+The factory runs one config per repository — nothing stops you from running
+several factories on several repositories at the same time. Each config gets
+its own backlog, logs, locks and `runs.jsonl`, and each daemon is a separate
+process, so instances are fully independent. The **instance registry** gives
+every factory a stable name so you can enumerate them and manage them from
+anywhere.
+
+```bash
+# 1. Initialize a config per repository (run the wizard in each project root)
+factory init
+
+# 2. Register each config under a stable name
+factory instance add site-a --config /path/to/site-a/factory.yaml
+factory instance add site-b --config /path/to/site-b/factory.yaml
+
+# 3. List every registered instance (also: `factory list`)
+factory instance list
+
+# 4. Start a daemon per instance (or use `factory start --name site-a`)
+factory start --name site-a
+factory start --name site-b
+
+# 5. Open the central dashboard: one page for every registered instance
+factory web           # default http://0.0.0.0:8790
+```
+
+`--name` works on `start`, `once`, `status`, `stop` and `restart` and is
+mutually exclusive with `--config`; an unknown name prints a clear error.
+When the embedded per-daemon dashboard is used, give each `factory.yaml` a
+distinct `web_port` (they all default to `8787`) — the central `factory web`
+dashboard avoids the conflict entirely. See [Configuration](configuration.md)
+for the registry file, and [CLI reference](cli-reference.md) for the commands.
+
 ## Next steps
 
 - [Configuration reference](configuration.md) — every `factory.yaml` key.
