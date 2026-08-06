@@ -108,6 +108,25 @@ def add_instance(name: str, config_path: str | Path) -> str:
     return name
 
 
+def ensure_registered(name: str, config_path: str | Path) -> bool:
+    """Register ``name`` -> the absolute path of ``config_path`` when missing.
+
+    Unlike :func:`add_instance` this never raises: a name that is already
+    registered (whatever it points at), fails the instance-name pattern, or
+    maps to a config that cannot be loaded is left untouched. Returns
+    ``True`` only when the instance was newly registered.
+    """
+    if name in load_registry():
+        return False
+    if not INSTANCE_NAME_RE.fullmatch(name):
+        return False
+    try:
+        add_instance(name, config_path)
+    except (ValueError, FileNotFoundError, yaml.YAMLError):
+        return False
+    return True
+
+
 def remove_instance(name: str) -> bool:
     """Unregister ``name``; never touches its config file or repository.
 

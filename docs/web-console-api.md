@@ -196,7 +196,8 @@ curl -s http://127.0.0.1:8787/api/status
 
 # Central dashboard (`factory web`)
 
-With several factories registered in the instance registry (see
+With several factories registered in the instance registry (each
+`factory start`/`factory stop` registers its config automatically, or use
 `factory instance add NAME --config PATH`), each daemon still serves its own
 embedded dashboard on its own `web_port` — but there is no overview, and
 every daemon defaults to the same port `8787`. Run the **central dashboard**

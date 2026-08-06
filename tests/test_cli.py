@@ -385,10 +385,56 @@ def test_parser_help_lists_stop_and_restart(capsys):
     assert "restart" in out
 
 
-def test_stop_not_running(git_repo, tmp_path, capsys):
+def test_stop_not_running(git_repo, tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("FORGEO_REGISTRY", str(tmp_path / "instances.yaml"))
     config_path = write_config(git_repo, tmp_path)
     assert cmd_stop(stop_args(config_path)) == 1
     assert "not running" in capsys.readouterr().out
+
+
+def test_stop_registers_unregistered_instance(git_repo, tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("FORGEO_REGISTRY", str(tmp_path / "instances.yaml"))
+    config_path = write_config(git_repo, tmp_path)
+
+    assert cmd_stop(stop_args(config_path)) == 1
+    assert "not running" in capsys.readouterr().out
+    assert load_registry() == {"test-factory": str(config_path.resolve())}
+
+
+def test_start_registers_instance_in_registry(git_repo, tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("FORGEO_REGISTRY", str(tmp_path / "instances.yaml"))
+    config_path = write_config(git_repo, tmp_path, web_port=0, interval_minutes=600)
+    lock_path = tmp_path / "backlog.lock"
+
+    proc = spawn_daemon(config_path)
+    try:
+        assert wait_for(lambda: is_lock_held(lock_path))
+        assert load_registry() == {"test-factory": str(config_path.resolve())}
+        assert cmd_stop(stop_args(config_path)) == 0
+        assert wait_for(lambda: proc.poll() is not None)
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+
+
+def test_stop_unknown_name_does_not_register(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("FORGEO_REGISTRY", str(tmp_path / "instances.yaml"))
+    assert (
+        cmd_stop(argparse.Namespace(config=DEFAULT_CONFIG, name="nope", timeout=30.0))
+        == 1
+    )
+    assert "Unknown instance" in capsys.readouterr().out
+    assert load_registry() == {}
+
+
+def test_once_does_not_register_instance(git_repo, tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("FORGEO_REGISTRY", str(tmp_path / "instances.yaml"))
+    config_path = write_config(git_repo, tmp_path, web_port=0)
+    fake = FakeFactory()
+    monkeypatch.setattr("factory.cli._make_factory", lambda config: fake)
+
+    assert cmd_once(once_args(config_path)) == 0
+    assert load_registry() == {}
 
 
 def test_stop_missing_config(tmp_path, capsys):
@@ -396,10 +442,11 @@ def test_stop_missing_config(tmp_path, capsys):
     assert "not found" in capsys.readouterr().out
 
 
-def test_stop_stale_pid_errors(git_repo, tmp_path, capsys):
+def test_stop_stale_pid_errors(git_repo, tmp_path, monkeypatch, capsys):
     """Lock held by an unknown process with a dead recorded pid: refuse."""
     import fcntl
 
+    monkeypatch.setenv("FORGEO_REGISTRY", str(tmp_path / "instances.yaml"))
     config_path = write_config(git_repo, tmp_path)
     handle = (tmp_path / "backlog.lock").open("w")
     handle.write("pid=999999999\n")
@@ -412,7 +459,8 @@ def test_stop_stale_pid_errors(git_repo, tmp_path, capsys):
         handle.close()
 
 
-def test_stop_terminates_running_daemon(git_repo, tmp_path, capsys):
+def test_stop_terminates_running_daemon(git_repo, tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("FORGEO_REGISTRY", str(tmp_path / "instances.yaml"))
     config_path = write_config(git_repo, tmp_path, web_port=0, interval_minutes=600)
     lock_path = tmp_path / "backlog.lock"
     proc = spawn_daemon(config_path)
@@ -428,7 +476,8 @@ def test_stop_terminates_running_daemon(git_repo, tmp_path, capsys):
             proc.kill()
 
 
-def test_restart_starts_daemon_when_not_running(git_repo, tmp_path, capsys):
+def test_restart_starts_daemon_when_not_running(git_repo, tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("FORGEO_REGISTRY", str(tmp_path / "instances.yaml"))
     config_path = write_config(git_repo, tmp_path, web_port=0, interval_minutes=600)
     lock_path = tmp_path / "backlog.lock"
 
@@ -444,7 +493,8 @@ def test_restart_starts_daemon_when_not_running(git_repo, tmp_path, capsys):
         cmd_stop(stop_args(config_path))
 
 
-def test_restart_replaces_running_daemon(git_repo, tmp_path, capsys):
+def test_restart_replaces_running_daemon(git_repo, tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("FORGEO_REGISTRY", str(tmp_path / "instances.yaml"))
     config_path = write_config(git_repo, tmp_path, web_port=0, interval_minutes=600)
     lock_path = tmp_path / "backlog.lock"
     old_proc = spawn_daemon(config_path)

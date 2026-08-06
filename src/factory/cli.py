@@ -22,7 +22,9 @@ Commands:
 * ``factory restart --config factory.yaml`` — stop the daemon when running,
    then start it again detached in the background, re-reading the config.
 * ``factory instance add NAME --config PATH`` — register an existing
-   ``factory.yaml`` under a stable instance name.
+   ``factory.yaml`` under a stable instance name. Optional: ``start`` and
+   ``stop`` register the factory automatically under its config's ``name``
+   when it is not in the registry yet.
 * ``factory instance rm NAME`` — unregister an instance (never touches its
    config file or repository).
 * ``factory instance list`` / ``factory list`` — a table of every registered
@@ -70,6 +72,7 @@ from factory.git import GitManager
 from factory.instances import (
     InstanceInfo,
     add_instance,
+    ensure_registered,
     list_instances,
     remove_instance,
     resolve_instance,
@@ -274,6 +277,25 @@ def _resolved_config_path(args: argparse.Namespace) -> Path | None:
     return config_path
 
 
+def _register_if_missing(
+    args: argparse.Namespace, config_path: Path, config: FactoryConfig
+) -> None:
+    """Auto-register the factory under ``config.name`` when not registered.
+
+    Only ``--config`` invocations register: with ``--name`` the instance
+    must already exist (``_resolved_config_path`` errors otherwise). The
+    instance name is the config's ``name`` field, so ``start``/``stop``
+    always leave the factory visible in the registry.
+    """
+    if getattr(args, "name", None) is not None:
+        return
+    if ensure_registered(config.name, config_path):
+        console.print(
+            f"[green]Registered instance {config.name!r} -> "
+            f"{config_path.resolve()}.[/green]"
+        )
+
+
 def _resolve_config(args: argparse.Namespace) -> FactoryConfig | None:
     """Load the config, offering the guided setup when missing.
 
@@ -349,7 +371,7 @@ def _make_factory(config: FactoryConfig) -> Factory:
 
 def _prepare_worker(
     args: argparse.Namespace,
-) -> tuple[FactoryConfig, Factory, Any] | None:
+) -> tuple[Path, FactoryConfig, Factory, Any] | None:
     """Resolve the config, take the run lock, and build the factory.
 
     Shared by ``start`` and ``once``. Returns ``None`` (after printing an
@@ -375,7 +397,7 @@ def _prepare_worker(
         console.print(f"[red]{exc}[/red]")
         log.error("Sandbox unavailable: %s", exc)
         return None
-    return config, factory, lock
+    return config_path, config, factory, lock
 
 
 def cmd_start(args: argparse.Namespace) -> int:
@@ -383,7 +405,8 @@ def cmd_start(args: argparse.Namespace) -> int:
     prepared = _prepare_worker(args)
     if prepared is None:
         return 1
-    config, factory, lock = prepared
+    config_path, config, factory, lock = prepared
+    _register_if_missing(args, config_path, config)
 
     async def _serve() -> None:
         daemon = FactoryDaemon(config, factory)
@@ -432,7 +455,7 @@ def cmd_once(args: argparse.Namespace) -> int:
     prepared = _prepare_worker(args)
     if prepared is None:
         return 1
-    _config, factory, lock = prepared
+    _config_path, _config, factory, lock = prepared
 
     async def _run_once() -> None:
         outcome = await factory.run_cycle()
@@ -581,6 +604,7 @@ def cmd_stop(args: argparse.Namespace) -> int:
     config = _load_config_or_error(config_path)
     if config is None:
         return 1
+    _register_if_missing(args, config_path, config)
     if not is_lock_held(config.backlog.with_suffix(".lock")):
         console.print(f"[yellow]Factory {config.name!r} is not running.[/yellow]")
         return 1
@@ -631,7 +655,12 @@ def cmd_default() -> int:
 
 
 def cmd_instance_add(args: argparse.Namespace) -> int:
-    """Handle ``factory instance add``: register an existing factory.yaml."""
+    """Handle ``factory instance add``: register an existing factory.yaml.
+
+    Normally unnecessary — ``factory start`` and ``factory stop`` register
+    the config under its ``name`` automatically — but handy to pre-register
+    an explicit name or one that differs from ``config.name``.
+    """
     try:
         add_instance(args.name, args.config)
     except (ValueError, FileNotFoundError, yaml.YAMLError) as exc:

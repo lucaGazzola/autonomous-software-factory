@@ -171,9 +171,11 @@ the host (`factory list` / `factory instance list`).
   site-b: /home/me/projects/site-b/factory.yaml
   ```
 
-- The file is created on the first `factory instance add`; a missing file
-  reads as an empty registry. Writes are atomic (temp file + rename), so a
-  crash mid-write never corrupts it.
+- The file is created on the first registration — a `factory instance add`,
+  or a `factory start`/`factory stop` whose config is not registered yet (it
+  is registered under the config's `name`); a missing file reads as an empty
+  registry. Writes are atomic (temp file + rename), so a crash mid-write
+  never corrupts it.
 - Names must match `^[a-zA-Z0-9._-]+$`; duplicates and unknown names are
   rejected with a clear error.
 - `factory instance rm NAME` unregisters without touching the config file or

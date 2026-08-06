@@ -45,6 +45,11 @@ The daemon wakes every `interval_minutes` and runs one cycle. When no config
 exists, `factory start` offers the guided setup. A second `start` (or `once`)
 is refused while the per-factory lock is held.
 
+When given `--config` and that config is not in the instance registry yet,
+`factory start` registers it automatically under the config's `name` field —
+no `factory instance add` needed. (With `--name` the instance must already be
+registered.)
+
 While running it serves a local web dashboard at `http://<web_host>:<web_port>`
 (see [Web console & HTTP API](web-console-api.md)) and logs to `log_file`.
 
@@ -114,6 +119,9 @@ first).
 Exit code is `0` on success, `1` when the factory is not running, the lock
 records a dead PID, or the daemon did not exit within the timeout.
 
+Like `start`, a `--config` invocation registers the factory under its config's
+`name` when it is not in the registry yet.
+
 ## `factory restart`
 
 Stop the daemon when running, then start it again **in the background**
@@ -134,6 +142,10 @@ On `start`, `once`, `status`, `stop` and `restart`, `--name` resolves the
 two flags are mutually exclusive — passing both is an argparse error. An
 unknown instance name prints a clear error and exits non-zero.
 
+`start` and `stop` with `--config` register the factory under its config's
+`name` when it is not registered yet, so instances are created automatically
+the first time a factory is started or stopped.
+
 ## `factory instance`
 
 Register, list, and unregister named factory instances. Instances live in a
@@ -143,7 +155,10 @@ maps each name to the absolute path of its `factory.yaml` (see
 
 ### `factory instance add <name> --config <file>`
 
-Register an existing `factory.yaml` under a stable name.
+Register an existing `factory.yaml` under a stable name. Optional: `factory
+start` and `factory stop` already register the factory automatically under its
+config's `name` — use `add` to pre-register an explicit name or one that
+differs from `config.name`.
 
 | Flag | Description |
 | --- | --- |

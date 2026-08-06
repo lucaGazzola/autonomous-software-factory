@@ -9,6 +9,7 @@ import pytest
 from factory.daemon import acquire_run_lock
 from factory.instances import (
     add_instance,
+    ensure_registered,
     list_instances,
     load_registry,
     registry_path,
@@ -105,6 +106,56 @@ def test_add_instance_rejects_invalid_config(tmp_path, monkeypatch):
     bad.write_text("name: x\nrepo: .\n", encoding="utf-8")
     with pytest.raises(ValueError):
         add_instance("alpha", bad)
+    assert load_registry() == {}
+
+
+def test_ensure_registered_registers_when_missing(tmp_path, monkeypatch):
+    monkeypatch.setenv("FORGEO_REGISTRY", str(tmp_path / "instances.yaml"))
+    config_path = write_config(tmp_path, "a")
+
+    assert ensure_registered("alpha", config_path) is True
+    assert load_registry() == {"alpha": str(config_path.resolve())}
+
+
+def test_ensure_registered_is_noop_when_present(tmp_path, monkeypatch):
+    monkeypatch.setenv("FORGEO_REGISTRY", str(tmp_path / "instances.yaml"))
+    config_path = write_config(tmp_path, "a")
+    add_instance("alpha", config_path)
+
+    assert ensure_registered("alpha", config_path) is False
+    assert load_registry() == {"alpha": str(config_path.resolve())}
+
+
+def test_ensure_registered_noop_when_name_taken_by_other_config(tmp_path, monkeypatch):
+    monkeypatch.setenv("FORGEO_REGISTRY", str(tmp_path / "instances.yaml"))
+    other = write_config(tmp_path, "b")
+    add_instance("alpha", other)
+
+    assert ensure_registered("alpha", write_config(tmp_path, "a")) is False
+    assert load_registry() == {"alpha": str(other.resolve())}
+
+
+def test_ensure_registered_skips_invalid_name(tmp_path, monkeypatch):
+    monkeypatch.setenv("FORGEO_REGISTRY", str(tmp_path / "instances.yaml"))
+    config_path = write_config(tmp_path, "a")
+
+    assert ensure_registered("bad name", config_path) is False
+    assert load_registry() == {}
+
+
+def test_ensure_registered_skips_missing_config(tmp_path, monkeypatch):
+    monkeypatch.setenv("FORGEO_REGISTRY", str(tmp_path / "instances.yaml"))
+
+    assert ensure_registered("alpha", tmp_path / "missing" / "factory.yaml") is False
+    assert load_registry() == {}
+
+
+def test_ensure_registered_skips_unloadable_config(tmp_path, monkeypatch):
+    monkeypatch.setenv("FORGEO_REGISTRY", str(tmp_path / "instances.yaml"))
+    bad = tmp_path / "bad.yaml"
+    bad.write_text("name: x\nrepo: .\n", encoding="utf-8")
+
+    assert ensure_registered("alpha", bad) is False
     assert load_registry() == {}
 
 
