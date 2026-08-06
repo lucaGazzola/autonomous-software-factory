@@ -1,10 +1,8 @@
-"""Helpers shared by the two web servers.
+"""Helpers for the central web dashboard (:mod:`factory.central`).
 
-The per-daemon server (:mod:`factory.server`) and the standalone central
-dashboard (:mod:`factory.central`) both speak JSON and serve static files
-over the stdlib ``http.server``. Keeping the small, pure helpers here lets
-the two handlers behave identically (same bounds, same static path
-guards, same serialization).
+The dashboard speaks JSON and serves static files over the stdlib
+``http.server``; these small, pure helpers keep the handler consistent
+(same bounds, same static path guards, same serialization).
 """
 
 from __future__ import annotations

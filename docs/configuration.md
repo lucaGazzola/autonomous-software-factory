@@ -30,8 +30,6 @@ use `factory restart` so it re-reads the file.
 | `blocked_exit_code` | `2` | Exit code meaning "needs human input". |
 | `refactor_prompt` | default refactor prompt | Instruction used when the backlog is empty. |
 | `log_file` | `factory.log` | Where the daemon writes its log. |
-| `web_host` | `127.0.0.1` | Web server bind address (`0.0.0.0` exposes it on the LAN). |
-| `web_port` | `8787` | Local web dashboard / HTTP API port (`0` disables the server). |
 | `git_timeout_seconds` | `120` | Kill a git subprocess after this many seconds. |
 | `telegram_bot_token` | — | Telegram bot token for blocked-run notifications (disabled unless `telegram_chat_id` is also set). |
 | `telegram_chat_id` | — | Chat ID that receives blocked-run notifications (disabled unless `telegram_bot_token` is also set). |
@@ -135,18 +133,6 @@ When set, successful commits are pushed to `<remote> <branch>`. When omitted,
 the factory only commits locally. A push failure never discards the commit —
 the work stays committed locally and the error is logged.
 
-### `web_host`
-
-Bind address of the web dashboard / HTTP API (default `127.0.0.1`, this
-machine only). Set `0.0.0.0` to expose it on the local network. See
-[Web console & HTTP API](web-console-api.md).
-
-### `web_port`
-
-Port for the web dashboard / HTTP API served while the daemon runs (default
-`8787`). Set to `0` to disable the server. See
-[Web console & HTTP API](web-console-api.md).
-
 ### Telegram notifications
 
 Both `telegram_bot_token` **and** `telegram_chat_id` must be set for blocked
@@ -189,16 +175,14 @@ Manage instances with `factory instance add|rm|list` and `factory list` — see
 Each registered instance is fully independent: every instance owns its own
 **backlog** file, **logs** (`log_file`), **run history** (`runs.jsonl` next
 to the backlog), **locks** (`backlog.lock` and the per-iteration run lock),
-and its own **`web_port`** for the embedded dashboard. Because relative paths
+and a **`daemon.state.json`** with its live state. Because relative paths
 resolve against each config file's own directory, two configs in different
 directories can never share state.
 
-When two daemons run on the same host and both use the embedded dashboard,
-give each `factory.yaml` a **distinct `web_port`** — they all default to
-`8787`, and a bind failure is logged while the daemon keeps running. The
-central dashboard (`factory web`, default port `8790`) reads every instance's
-data straight from its files, so it works regardless of each daemon's
-`web_port` — see [Web console & HTTP API](web-console-api.md).
+The daemons bind no ports. The central dashboard (`factory web`, default port
+`8790`) reads every instance's data straight from its files, so it works
+whether or not each daemon is running — see
+[Web console & HTTP API](web-console-api.md).
 
 ## Default refactor prompt
 

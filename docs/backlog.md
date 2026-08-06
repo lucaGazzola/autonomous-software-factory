@@ -78,9 +78,9 @@ cheap/fast model and hard ones to a frontier model:
 
 You add, remove, or reopen tasks by editing the file directly — or use the
 **new-task form** in the [web console](web-console-api.md) (`POST
-/api/tasks`), which assigns the next free `WEB-###` id for you. To retry a
-`BLOCKED` task, set its status back to `OPEN` — the factory picks it up on the
-next scheduled run.
+/api/instances/<name>/tasks`), which assigns the next free `WEB-###` id for
+you. To retry a `BLOCKED` task, set its status back to `OPEN` — the factory
+picks it up on the next scheduled run.
 
 ## Oldest-first ordering
 

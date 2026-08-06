@@ -1,27 +1,28 @@
 """Central multi-instance web dashboard (``factory web``).
 
-A standalone, read-only server that aggregates every factory registered in
-the instance registry (:mod:`factory.instances`). Unlike the per-daemon
-dashboard (:mod:`factory.server`) — which is embedded in one daemon and only
-shows that single factory — the central dashboard reads each instance's data
-straight from its files (``backlog.json``, ``runs.jsonl``, ``factory.log``,
-``BLOCKER.md``), so it works whether or not that instance's daemon is
-running.
+A standalone server that aggregates every factory registered in the instance
+registry (:mod:`factory.instances`). It reads each instance's data straight
+from its files (``backlog.json``, ``runs.jsonl``, ``factory.log``,
+``BLOCKER.md``, ``daemon.state.json``), so it works whether or not that
+instance's daemon is running — the daemon binds no ports at all.
 
 Routes:
 
 * ``GET /`` — home page listing every registered instance: name, repo,
   daemon state, last outcome, next run, and backlog counts.
 * ``GET /instances/<name>/`` — per-instance page: that instance's kanban
-  backlog plus tabs for logs, runs, blocker, and config.
+  backlog (with a form to add tasks) plus tabs for logs, runs, blocker, and
+  config.
 * ``GET /api/instances`` — JSON summary of every registered instance.
 * ``GET /api/instances/<name>/tasks``, ``/tasks/<id>``, ``/status``,
   ``/logs?lines=N``, ``/runs?limit=N``, ``/blocker``, ``/config`` — the
-  per-instance API, mirroring the embedded daemon's endpoints.
+  per-instance API.
+* ``POST /api/instances/<name>/tasks`` — add a new task to that instance's
+  backlog (the only write endpoint).
 
 An unknown instance name returns ``404``; a registered instance with missing
 data files renders with empty data and ``daemon_running=false`` rather than
-erroring. Everything stays read-only.
+erroring.
 """
 
 from __future__ import annotations
@@ -29,6 +30,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import signal
 import threading
 from datetime import timedelta
@@ -41,7 +43,7 @@ from pydantic import ValidationError
 from rich.console import Console
 from rich.panel import Panel
 
-from factory.backlog import backlog_status_counts
+from factory.backlog import JSONBacklog, backlog_status_counts
 from factory.daemon import read_lock_pid
 from factory.instances import (
     InstanceInfo,
@@ -71,6 +73,37 @@ DEFAULT_PORT = 8790
 
 _HOME_PAGE = "/central/index.html"
 _INSTANCE_PAGE = "/central/instance.html"
+
+_WEB_TASK_ID_RE = re.compile(r"^WEB-(\d+)$")
+
+
+def web_task_id_for(tasks: list[Task]) -> str:
+    """Next ``WEB-###`` id after the highest existing ``WEB-###`` id."""
+    highest = 0
+    for task in tasks:
+        match = _WEB_TASK_ID_RE.match(task.id)
+        if match:
+            highest = max(highest, int(match.group(1)))
+    return f"WEB-{highest + 1:03d}"
+
+
+def _daemon_state(config: Any) -> dict[str, Any] | None:
+    """The daemon's persisted live state, or ``None`` when unavailable.
+
+    The daemon writes ``daemon.state.json`` (next to the backlog) after
+    every cycle; a missing, unreadable, or stale file reads as ``None`` and
+    callers fall back to estimates from ``runs.jsonl``.
+    """
+    if config is None:
+        return None
+    state_path = Path(config.backlog).with_suffix(".state.json")
+    try:
+        data = json.loads(state_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    return data
 
 
 def _read_tasks(config: Any) -> list[Task]:
@@ -115,22 +148,34 @@ def _blocker_content(config: Any) -> str | None:
 
 
 def _last_outcome(config: Any) -> str | None:
-    """The most recent run's outcome string from ``runs.jsonl``, or ``None``."""
+    """The most recent run's outcome string, or ``None``.
+
+    Prefers the daemon's persisted state; falls back to ``runs.jsonl`` when
+    no state file exists (e.g. an older daemon version).
+    """
     if config is None:
         return None
+    state = _daemon_state(config)
+    outcome = state.get("last_outcome") if state is not None else None
+    if isinstance(outcome, str):
+        return outcome
     last_run = RunRecorder(runs_path_for(config.backlog)).read_last()
     return last_run.outcome.value if last_run is not None else None
 
 
 def _next_run(info: InstanceInfo, config: Any) -> str | None:
-    """An estimate of the next scheduled run, when it can be derived.
+    """The next scheduled run, when it can be derived.
 
-    With the daemon running and at least one recorded run, the next run is
-    approximated as the last run's finish time plus the interval. Otherwise
-    there is no way to know the next run from the files, so ``None``.
+    Prefers the daemon's persisted state (written every cycle). With no state
+    file, the next run is approximated as the last run's finish time plus the
+    interval — but only while the daemon is running.
     """
     if not info.daemon_running or config is None:
         return None
+    state = _daemon_state(config)
+    next_run_at = state.get("next_run_at") if state is not None else None
+    if isinstance(next_run_at, str):
+        return next_run_at
     last_run = RunRecorder(runs_path_for(config.backlog)).read_last()
     if last_run is None:
         return None
@@ -139,7 +184,7 @@ def _next_run(info: InstanceInfo, config: Any) -> str | None:
 
 
 def _status_payload(info: InstanceInfo) -> dict[str, Any]:
-    """The per-instance status payload, mirroring the embedded ``/api/status``."""
+    """The per-instance status payload."""
     config = info.config
     if config is None:
         return {
@@ -151,12 +196,18 @@ def _status_payload(info: InstanceInfo) -> dict[str, Any]:
             "last_outcome": None,
             "next_run_at": None,
         }
+    state = _daemon_state(config)
+    pid: int | None = read_lock_pid(config.backlog.with_suffix(".lock"))
+    if state is not None:
+        state_pid = state.get("pid")
+        if isinstance(state_pid, int):
+            pid = state_pid
     return {
         "name": config.name,
         "repo": str(config.repo),
         "interval_minutes": config.interval_minutes,
         "daemon_running": info.daemon_running,
-        "pid": read_lock_pid(config.backlog.with_suffix(".lock")),
+        "pid": pid,
         "last_outcome": _last_outcome(config),
         "next_run_at": _next_run(info, config),
     }
@@ -242,6 +293,86 @@ def make_handler() -> type[BaseHTTPRequestHandler]:
             except Exception:
                 logger.exception("Web request failed: %s", path)
                 self._send_json(500, {"error": "internal server error"})
+
+        def do_POST(self) -> None:
+            parsed = urlparse(self.path)
+            path = parsed.path
+
+            try:
+                if path.startswith("/api/instances/"):
+                    self._post_instance_task(path)
+                    return
+                self._send_json(404, {"error": "not found"})
+            except Exception:
+                logger.exception("Web request failed: %s", path)
+                self._send_json(500, {"error": "internal server error"})
+
+        def _post_instance_task(self, path: str) -> None:
+            """Create a task in an instance's backlog from a JSON body."""
+            parts = path[len("/api/instances/") :].split("/")
+            name = unquote(parts[0])
+            info = get_instance(name)
+            if info is None:
+                self._send_json(404, {"error": "unknown instance"})
+                return
+            if len(parts) != 2 or parts[1] != "tasks":
+                self._send_json(404, {"error": "not found"})
+                return
+            if info.config is None:
+                self._send_json(500, {"error": "instance config not available"})
+                return
+
+            raw_length = self.headers.get("Content-Length")
+            if raw_length is None:
+                self._send_json(400, {"error": "request body is required"})
+                return
+            try:
+                length = int(raw_length)
+            except ValueError:
+                self._send_json(400, {"error": "invalid Content-Length"})
+                return
+            body = self.rfile.read(max(length, 0))
+            try:
+                payload = json.loads(body.decode("utf-8"))
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                self._send_json(400, {"error": "request body must be JSON"})
+                return
+            if not isinstance(payload, dict):
+                self._send_json(400, {"error": "request body must be a JSON object"})
+                return
+            title = payload.get("title")
+            if not isinstance(title, str) or not title.strip():
+                self._send_json(400, {"error": "title is required"})
+                return
+            description = payload.get("description", "")
+            if not isinstance(description, str):
+                self._send_json(400, {"error": "description must be a string"})
+                return
+            acceptance_criteria = payload.get("acceptance_criteria", [])
+            if not isinstance(acceptance_criteria, list) or not all(
+                isinstance(criterion, str) for criterion in acceptance_criteria
+            ):
+                self._send_json(
+                    400, {"error": "acceptance_criteria must be a list of strings"}
+                )
+                return
+
+            backlog = JSONBacklog(info.config.backlog)
+            existing = asyncio.run(backlog.list_tasks())
+            task = Task(
+                id=web_task_id_for(existing),
+                title=title.strip(),
+                description=description,
+                acceptance_criteria=acceptance_criteria,
+            )
+            try:
+                created = asyncio.run(backlog.create_task(task))
+            except ValueError:
+                self._send_json(
+                    409, {"error": f"task id already exists in backlog: {task.id!r}"}
+                )
+                return
+            self._send_json(201, created.model_dump(mode="json"))
 
         def _handle_instance_page(self, path: str) -> None:
             name = unquote(path[len("/instances/") :]).strip("/")

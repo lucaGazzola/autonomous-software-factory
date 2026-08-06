@@ -6,13 +6,21 @@ factory. A per-run lock prevents two agents from ever working on the same
 repository at the same time: when a run is still in progress at the next
 wake-up, that iteration is skipped instead of killing the running agent.
 Everything else is logged to the configured log file.
+
+Live state (pid, started at, last outcome, next run) is written to a small
+``daemon.state.json`` next to the backlog after every cycle, so external
+observers (the central dashboard, the CLI) can read it without the daemon
+serving any port. The file is written atomically; a crash mid-write never
+corrupts it, and a missing/stale file simply reads as unknown state.
 """
 
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
+import tempfile
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
@@ -139,12 +147,46 @@ class FactoryDaemon:
         self.run_lock = RunLock(config.backlog.with_suffix(".run"))
         self._stop_event = asyncio.Event()
         self.pid: int = os.getpid()
+        self.started_at: datetime = datetime.now(UTC)
         self.last_outcome: str | None = None
         self.next_run_at: datetime | None = None
+
+    @property
+    def state_file(self) -> Path:
+        """The ``daemon.state.json`` path, next to the backlog's lock files."""
+        return self.config.backlog.with_suffix(".state.json")
 
     def stop(self) -> None:
         """Request a graceful shutdown after the current cycle."""
         self._stop_event.set()
+
+    def write_state(self) -> None:
+        """Atomically persist the daemon's live state for external readers.
+
+        A missing or stale file is fine: readers treat it as unknown state.
+        """
+        payload = {
+            "pid": self.pid,
+            "started_at": self.started_at.isoformat(),
+            "last_outcome": self.last_outcome,
+            "next_run_at": (
+                self.next_run_at.isoformat() if self.next_run_at is not None else None
+            ),
+        }
+        path = self.state_file
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp_name = tempfile.mkstemp(
+            dir=path.parent, prefix=f".{path.name}.", suffix=".tmp"
+        )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                json.dump(payload, handle, indent=2)
+                handle.write("\n")
+            os.replace(tmp_name, path)
+        except BaseException:
+            if os.path.exists(tmp_name):
+                os.unlink(tmp_name)
+            raise
 
     async def run_forever(self) -> None:
         """Wake up on the schedule interval until ``stop()`` is called."""
@@ -155,6 +197,7 @@ class FactoryDaemon:
             self.config.interval_minutes,
             self.config.branch,
         )
+        self.write_state()
         while not self._stop_event.is_set():
             try:
                 with self.run_lock.held() as acquired:
@@ -169,8 +212,10 @@ class FactoryDaemon:
                 self.last_outcome = "error"
                 logger.exception("Run crashed; continuing on the next interval.")
             self.next_run_at = datetime.now(UTC) + timedelta(seconds=self.interval_seconds)
+            self.write_state()
             try:
                 await asyncio.wait_for(self._stop_event.wait(), timeout=self.interval_seconds)
             except TimeoutError:
                 pass
+        self.write_state()
         logger.info("Factory stopped.")

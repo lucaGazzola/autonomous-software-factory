@@ -125,3 +125,38 @@ async def test_daemon_runs_after_run_lock_released(git_repo, tmp_path):
     daemon.stop()
     await asyncio.wait_for(task, timeout=5)
     assert daemon.factory.cycles >= 1
+
+
+def test_state_file_written_on_start(git_repo, tmp_path):
+    import json
+
+    daemon = make_daemon(git_repo, tmp_path)
+    assert not daemon.state_file.exists()
+    daemon.write_state()
+    payload = json.loads(daemon.state_file.read_text(encoding="utf-8"))
+    assert payload["pid"] == os.getpid()
+    assert payload["started_at"]
+    assert payload["last_outcome"] is None
+    assert payload["next_run_at"] is None
+
+
+async def test_state_file_tracks_runs(git_repo, tmp_path):
+    import json
+
+    daemon = make_daemon(git_repo, tmp_path)
+    daemon.interval_seconds = 0.01
+    task = asyncio.create_task(daemon.run_forever())
+    while daemon.factory.cycles == 0:
+        await asyncio.sleep(0.01)
+    daemon.stop()
+    await asyncio.wait_for(task, timeout=5)
+
+    payload = json.loads(daemon.state_file.read_text(encoding="utf-8"))
+    assert payload["pid"] == os.getpid()
+    assert payload["last_outcome"] == "task"
+    assert payload["next_run_at"]
+
+
+def test_state_file_path_next_to_backlog(git_repo, tmp_path):
+    daemon = make_daemon(git_repo, tmp_path)
+    assert daemon.state_file == tmp_path / "backlog.state.json"

@@ -46,8 +46,8 @@ factory start   # run forever: every interval_minutes, implement the oldest OPEN
 `factory init` writes `factory.yaml` and a `.factory/` folder for the backlog
 and logs, gitignored for you. Fill the backlog with plain JSON tasks (see
 [Backlog format](docs/backlog.md)) — or add them from the web console while
-it runs — and the factory does the rest, serving a local dashboard at
-<http://127.0.0.1:8787>:
+it runs — and the factory does the rest. The daemon binds no ports; open the
+dashboard with `factory web` (default <http://0.0.0.0:8790>):
 
 ![Forgeo web console](docs/img/console.png)
 
@@ -56,11 +56,11 @@ One-off commands: `factory once` (single cycle), `factory status` (summary),
 [CLI reference](docs/cli-reference.md).
 
 You can run several factories at once, one per repository — each config is
-fully independent (own backlog, logs, locks, `web_port`). Register each
-`factory.yaml` in the instance registry with `factory instance add NAME
---config PATH`, manage any of them by name with `factory start/status/stop
---name NAME`, list them all with `factory list`, and get one aggregate
-overview at <http://0.0.0.0:8790> with the central dashboard, `factory web`.
+fully independent (own backlog, logs, locks). Register each `factory.yaml`
+in the instance registry with `factory instance add NAME --config PATH`,
+manage any of them by name with `factory start/status/stop --name NAME`,
+list them all with `factory list`, and get one aggregate overview with the
+central dashboard, `factory web`.
 
 ## Documentation
 

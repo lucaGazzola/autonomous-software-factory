@@ -55,9 +55,6 @@ refactor_prompt: |
   make no changes.
 
 log_file: factory.log
-# web_host: 127.0.0.1             # Web server bind address. 127.0.0.1 = this machine
-                                  # only (default); 0.0.0.0 = reachable on the LAN.
-# web_port: 8787                  # Local read-only HTTP API port (0 = off).
 
 # Optional Telegram notifications when a task (or refactoring pass) turns
 # BLOCKED. Set both keys to enable; omit to disable. The message includes the

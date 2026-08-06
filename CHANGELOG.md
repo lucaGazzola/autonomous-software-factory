@@ -16,9 +16,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   works whether or not that instance's daemon is running. Home page at `/`,
   per-instance pages at `/instances/<name>/` (kanban backlog plus logs,
   runs, blocker and config tabs), and a per-instance API under
-  `/api/instances/<name>/` mirroring the embedded daemon's endpoints.
-- Shared web-server helpers (`factory.web_common`) used by both the embedded
-  per-daemon dashboard and the central dashboard.
+  `/api/instances/<name>/`.
+- Shared web-server helpers (`factory.web_common`) used by the central
+  dashboard.
+
+### Changed
+
+- **The embedded per-daemon web server is gone.** `factory start` no longer
+  binds any port (`web_host`/`web_port` config keys are removed). The daemon
+  instead writes its live state (pid, started at, last outcome, next run) to
+  `daemon.state.json` next to the backlog after every cycle.
+- The central dashboard (`factory web`) is now the **only** web interface:
+  it reads the daemon state files for accurate status, and it gained the
+  instance backlog's only write endpoint, `POST
+  /api/instances/<name>/tasks` (with the web form on each instance page), so
+  no feature was lost.
+- `factory.web_common` docstring/API updated; `factory.server` module
+  removed.
 
 ## [0.2.1] - 2026-08-05
 

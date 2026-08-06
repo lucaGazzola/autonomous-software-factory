@@ -60,7 +60,7 @@ factory.yaml ──► factory start (daemon)
 | `factory.agent` | `src/factory/agent.py` | `ShellAgent`: runs your command, maps exit codes to outcomes, delivers `FACTORY_TASK`. |
 | `factory.git` | `src/factory/git.py` | Single-branch git operations: ensure branch, commit all, push, hard reset. |
 | `factory.config` | `src/factory/config.py` | Loads and validates `factory.yaml`. |
-| `factory.server` | `src/factory/server.py` | Local read-only HTTP API / web console served by the daemon. |
+| `factory.central` | `src/factory/central.py` | The `factory web` dashboard: one HTTP API + UI for every registered instance. |
 | `factory.setup` | `src/factory/setup.py` | The guided `factory init` wizard. |
 | `factory.notify` | `src/factory/notify.py` | Optional Telegram notifications for blocked runs. |
 | `factory.models` | `src/factory/models.py` | The data contracts: `Task`, `FactoryConfig`, `ExecutionResult`, statuses. |

@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from factory.central import CentralWebServer
+from factory.central import CentralWebServer, web_task_id_for
 from factory.cli import build_parser, cmd_web
 from factory.daemon import acquire_run_lock
 from factory.instances import add_instance
@@ -37,6 +37,26 @@ def _get(url: str) -> tuple[int, dict | list | str]:
             return exc.code, json.loads(body)
         except json.JSONDecodeError:
             return exc.code, body
+
+
+def _post(url: str, data: str | None) -> tuple[int, dict | list | str]:
+    body = data.encode("utf-8") if data is not None else None
+    request = urllib.request.Request(url, data=body, method="POST")
+    if body is not None:
+        request.add_header("Content-Type", "application/json")
+    try:
+        with urllib.request.urlopen(request, timeout=5) as resp:
+            resp_body = resp.read().decode("utf-8")
+            ctype = resp.headers.get_content_type()
+            if ctype == "application/json":
+                return resp.status, json.loads(resp_body)
+            return resp.status, resp_body
+    except urllib.error.HTTPError as exc:
+        resp_body = exc.read().decode("utf-8")
+        try:
+            return exc.code, json.loads(resp_body)
+        except json.JSONDecodeError:
+            return exc.code, resp_body
 
 
 def task_json(task_id: str, title: str, status: TaskStatus) -> dict:
@@ -185,6 +205,14 @@ def test_instance_page_served(web_env):
     assert 'data-page="instance"' in body
 
 
+def test_instance_page_has_new_task_form(web_env):
+    server, _ = web_env
+    status, body = _get(f"http://127.0.0.1:{server.port}/instances/alpha/")
+    assert status == 200
+    assert 'id="new-task"' in body
+    assert 'id="task-title"' in body
+
+
 def test_unknown_instance_returns_404(web_env):
     server, _ = web_env
     status, data = _get(f"http://127.0.0.1:{server.port}/instances/nope/")
@@ -222,6 +250,57 @@ def test_status_reports_running_daemon_and_next_run(web_env):
         lock.close()
 
 
+def test_status_prefers_daemon_state_file(web_env):
+    """``next_run_at``/``last_outcome``/``pid`` come from daemon.state.json
+    when present, even without a lock held."""
+    server, registry = web_env
+    state_path = registry / "alpha" / "backlog.state.json"
+    state_path.write_text(
+        json.dumps(
+            {
+                "pid": 4242,
+                "started_at": "2026-08-01T01:00:00+00:00",
+                "last_outcome": "task",
+                "next_run_at": "2026-08-01T12:00:00+00:00",
+            }
+        ),
+        encoding="utf-8",
+    )
+    status, data = _get(f"http://127.0.0.1:{server.port}/api/instances/alpha/status")
+    assert status == 200
+    assert data["pid"] == 4242
+    assert data["last_outcome"] == "task"
+    assert data["next_run_at"] is None  # daemon not running: no schedule
+    assert data["daemon_running"] is False
+
+
+def test_status_daemon_state_file_next_run(web_env):
+    server, registry = web_env
+    state_path = registry / "alpha" / "backlog.state.json"
+    state_path.write_text(
+        json.dumps(
+            {
+                "pid": 4242,
+                "started_at": "2026-08-01T01:00:00+00:00",
+                "last_outcome": "task",
+                "next_run_at": "2026-08-01T12:00:00+00:00",
+            }
+        ),
+        encoding="utf-8",
+    )
+    lock = acquire_run_lock(registry / "alpha" / "backlog.lock")
+    assert lock is not None
+    try:
+        status, data = _get(f"http://127.0.0.1:{server.port}/api/instances/alpha/status")
+        assert status == 200
+        assert data["daemon_running"] is True
+        assert data["pid"] == 4242
+        assert data["next_run_at"] == "2026-08-01T12:00:00+00:00"
+        assert data["last_outcome"] == "task"
+    finally:
+        lock.close()
+
+
 def test_tasks_endpoints(web_env):
     server, _ = web_env
     status, data = _get(f"http://127.0.0.1:{server.port}/api/instances/alpha/tasks")
@@ -235,6 +314,142 @@ def test_tasks_endpoints(web_env):
     status, data = _get(f"http://127.0.0.1:{server.port}/api/instances/alpha/tasks/MISSING")
     assert status == 404
     assert data["error"] == "not found"
+
+
+def test_post_task_creates_in_backlog(web_env):
+    server, _ = web_env
+    base = f"http://127.0.0.1:{server.port}/api/instances/alpha/tasks"
+    status, data = _post(base, json.dumps({"title": "Build a thing"}))
+    assert status == 201
+    assert isinstance(data, dict)
+    assert data["id"] == "WEB-001"
+    assert data["title"] == "Build a thing"
+    assert data["description"] == ""
+    assert data["acceptance_criteria"] == []
+    assert data["status"] == "OPEN"
+
+    status, tasks = _get(base)
+    assert status == 200
+    assert [t["id"] for t in tasks] == ["TASK-001", "TASK-002", "WEB-001"]
+
+    status, tasks = _get(f"http://127.0.0.1:{server.port}/api/instances/beta/tasks")
+    assert status == 200
+    assert [t["id"] for t in tasks] == ["B-1"]
+
+
+def test_post_task_increments_web_ids(web_env):
+    server, _ = web_env
+    base = f"http://127.0.0.1:{server.port}/api/instances/alpha/tasks"
+    _, first = _post(base, json.dumps({"title": "One"}))
+    _, second = _post(base, json.dumps({"title": "Two"}))
+    assert first["id"] == "WEB-001"
+    assert second["id"] == "WEB-002"
+
+
+def test_post_task_includes_optional_fields(web_env):
+    server, _ = web_env
+    base = f"http://127.0.0.1:{server.port}/api/instances/alpha/tasks"
+    status, data = _post(
+        base,
+        json.dumps(
+            {
+                "title": "  Refactor the cache  ",
+                "description": "Make it faster.",
+                "acceptance_criteria": ["no regressions", "tests pass"],
+            }
+        ),
+    )
+    assert status == 201
+    assert data["title"] == "Refactor the cache"
+    assert data["description"] == "Make it faster."
+    assert data["acceptance_criteria"] == ["no regressions", "tests pass"]
+    assert data["created_at"]
+    assert data["updated_at"]
+
+
+def test_post_task_validation_errors(web_env):
+    server, _ = web_env
+    base = f"http://127.0.0.1:{server.port}/api/instances/alpha/tasks"
+
+    for payload in ({}, {"title": "   "}, {"title": 42}):
+        status, data = _post(base, json.dumps(payload))
+        assert status == 400
+        assert data["error"]
+
+    status, data = _post(base, "{not json")
+    assert status == 400
+    assert data["error"]
+
+    status, data = _post(base, "[1, 2]")
+    assert status == 400
+    assert data["error"]
+
+    status, data = _post(base, None)
+    assert status == 400
+    assert data["error"]
+
+    status, data = _post(base, json.dumps({"title": "x", "description": 1}))
+    assert status == 400
+    assert data["error"]
+
+    status, data = _post(
+        base, json.dumps({"title": "x", "acceptance_criteria": "nope"})
+    )
+    assert status == 400
+    assert data["error"]
+
+
+def test_post_task_unknown_instance_404(web_env):
+    server, _ = web_env
+    status, data = _post(
+        f"http://127.0.0.1:{server.port}/api/instances/nope/tasks",
+        json.dumps({"title": "x"}),
+    )
+    assert status == 404
+    assert data["error"] == "unknown instance"
+
+
+def test_post_task_wrong_path_404(web_env):
+    server, _ = web_env
+    status, data = _post(
+        f"http://127.0.0.1:{server.port}/api/instances/alpha/bogus",
+        json.dumps({"title": "x"}),
+    )
+    assert status == 404
+    assert data["error"] == "not found"
+
+
+def test_post_task_id_collision_409(web_env, monkeypatch):
+    import factory.central as central_module
+
+    server, _ = web_env
+    monkeypatch.setattr(central_module, "web_task_id_for", lambda tasks: "TASK-001")
+    status, data = _post(
+        f"http://127.0.0.1:{server.port}/api/instances/alpha/tasks",
+        json.dumps({"title": "Duplicate"}),
+    )
+    assert status == 409
+    assert data["error"]
+
+
+def test_post_task_does_not_leak_failed_task(web_env, monkeypatch):
+    import factory.central as central_module
+
+    server, _ = web_env
+    monkeypatch.setattr(central_module, "web_task_id_for", lambda tasks: "TASK-001")
+    _post(
+        f"http://127.0.0.1:{server.port}/api/instances/alpha/tasks",
+        json.dumps({"title": "Duplicate"}),
+    )
+    status, tasks = _get(f"http://127.0.0.1:{server.port}/api/instances/alpha/tasks")
+    assert status == 200
+    assert [t["id"] for t in tasks] == ["TASK-001", "TASK-002"]
+
+
+def test_web_task_id_for():
+    tasks = [make_task(id="TASK-001", title="a"), make_task(id="WEB-007", title="b")]
+    assert web_task_id_for(tasks) == "WEB-008"
+    assert web_task_id_for([]) == "WEB-001"
 
 
 def test_logs_endpoint(web_env):

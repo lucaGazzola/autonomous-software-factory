@@ -366,8 +366,61 @@
       });
   }
 
+  function wireNewTask() {
+    var form = document.getElementById("new-task");
+    var error = document.getElementById("new-task-error");
+    if (!form || !API) return;
+
+    form.addEventListener("submit", function (event) {
+      event.preventDefault();
+      if (error) error.hidden = true;
+
+      var title = document.getElementById("task-title").value.trim();
+      if (!title) {
+        if (error) {
+          error.textContent = "title is required";
+          error.hidden = false;
+        }
+        return;
+      }
+      var description = document.getElementById("task-description").value.trim();
+      var rawCriteria = document.getElementById("task-acceptance").value.trim();
+      var acceptance = rawCriteria
+        ? rawCriteria.split(",").map(function (s) { return s.trim(); }).filter(Boolean)
+        : [];
+
+      fetch(API + "tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: title, description: description, acceptance_criteria: acceptance }),
+      })
+        .then(function (resp) {
+          if (!resp.ok) {
+            return resp.json().then(function (data) {
+              throw new Error((data && data.error) || "HTTP " + resp.status);
+            });
+          }
+          return resp.json();
+        })
+        .then(function () {
+          form.reset();
+          return fetchJSON(API + "tasks");
+        })
+        .then(function (tasks) {
+          renderTasks(tasks || []);
+        })
+        .catch(function (err) {
+          if (error) {
+            error.textContent = err.message || "failed to add task";
+            error.hidden = false;
+          }
+        });
+    });
+  }
+
   function wire() {
     if (page === "instance") {
+      wireNewTask();
       var buttons = document.querySelectorAll(".tab[data-tab]");
       for (var i = 0; i < buttons.length; i++) {
         buttons[i].addEventListener("click", function () {

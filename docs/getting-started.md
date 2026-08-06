@@ -83,8 +83,9 @@ factory start
 
 The daemon wakes up every `interval_minutes` and runs one cycle. It runs in
 the foreground — interrupt it with Ctrl-C, or stop it from another terminal
-with `factory stop`. A local web dashboard is served at
-<http://127.0.0.1:8787> (see [Web console & HTTP API](web-console-api.md)):
+with `factory stop`. It binds no ports itself; open the dashboard (which
+shows every registered instance) with `factory web` — see
+[Web console & HTTP API](web-console-api.md):
 
 ![Forgeo web console](img/console.png)
 
@@ -135,11 +136,9 @@ factory web           # default http://0.0.0.0:8790
 mutually exclusive with `--config`; an unknown name prints a clear error.
 `start` and `stop` with `--config` register the factory automatically under
 its config's `name` when it is not in the registry yet, so the registry stays
-in sync without manual `factory instance add` steps.
-When the embedded per-daemon dashboard is used, give each `factory.yaml` a
-distinct `web_port` (they all default to `8787`) — the central `factory web`
-dashboard avoids the conflict entirely. See [Configuration](configuration.md)
-for the registry file, and [CLI reference](cli-reference.md) for the commands.
+in sync without manual `factory instance add` steps. See
+[Configuration](configuration.md) for the registry file, and
+[CLI reference](cli-reference.md) for the commands.
 
 ## Next steps
 

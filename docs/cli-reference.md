@@ -50,8 +50,10 @@ When given `--config` and that config is not in the instance registry yet,
 no `factory instance add` needed. (With `--name` the instance must already be
 registered.)
 
-While running it serves a local web dashboard at `http://<web_host>:<web_port>`
-(see [Web console & HTTP API](web-console-api.md)) and logs to `log_file`.
+While running it logs to `log_file` and writes its live state (pid, last
+outcome, next run) to `daemon.state.json` next to the backlog. It binds no
+ports — the web dashboard for it is served by `factory web`
+(see [Web console & HTTP API](web-console-api.md)).
 
 ## `factory once`
 
@@ -184,9 +186,9 @@ registered instances it prints a hint and exits `0`.
 ## `factory web`
 
 Serve the **central multi-instance dashboard** in the foreground (like
-`factory start`): one read-only page that aggregates every registered
-instance. It reads each instance's data straight from its files
-(`backlog.json`, `runs.jsonl`, `factory.log`, `BLOCKER.md`), so it works
+`factory start`): one page that aggregates every registered instance. It
+reads each instance's data straight from its files (`backlog.json`,
+`runs.jsonl`, `factory.log`, `BLOCKER.md`, `daemon.state.json`), so it works
 whether or not each instance's daemon is running.
 
 | Flag | Description |
@@ -196,11 +198,11 @@ whether or not each instance's daemon is running.
 
 - `GET /` — home page listing every registered instance (daemon state, last
   outcome, next run, backlog counts).
-- `GET /instances/<name>/` — one instance's page: its kanban backlog plus
-  tabs for logs, runs, blocker, and config.
+- `GET /instances/<name>/` — one instance's page: its kanban backlog (with a
+  form to add tasks) plus tabs for logs, runs, blocker, and config.
 
-See [Web console & HTTP API](web-console-api.md) for the full API and the
-per-daemon dashboard served by `factory start`.
+See [Web console & HTTP API](web-console-api.md) for the full API. This is
+the only web dashboard: daemons themselves bind no ports.
 
 ## Process checks
 

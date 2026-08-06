@@ -48,6 +48,15 @@
   </nav>
 
   <main id="tab-backlog" class="tab-panel board" aria-live="polite">
+    <form class="new-task" id="new-task">
+      <div class="new-task__fields">
+        <input id="task-title" name="title" type="text" placeholder="New task title" autocomplete="off">
+        <input id="task-description" name="description" type="text" placeholder="Description (optional)" autocomplete="off">
+        <input id="task-acceptance" name="acceptance_criteria" type="text" placeholder="Acceptance criteria, comma-separated (optional)" autocomplete="off">
+      </div>
+      <button type="submit">Add task</button>
+      <p class="new-task__error" id="new-task-error" hidden></p>
+    </form>
     <div class="empty-state" id="empty-state" hidden>
       <p class="empty-title">No tasks</p>
       <p class="empty-sub">The backlog is empty. The factory will run a refactoring pass until a task lands.</p>

@@ -11,6 +11,8 @@ Commands:
   backlog, or runs a refactoring pass when the backlog is empty; everything
   is committed and pushed on the main branch. When the agent needs human
   input, a detailed ``BLOCKER.md`` file is written with what you must do.
+  The daemon binds no ports; live state is written to ``daemon.state.json``
+  and is served to you by ``factory web``.
 * ``factory once --config factory.yaml`` — run exactly one cycle and exit.
    Shares the per-factory lock with the daemon, so it never overlaps a
    running ``start``.
@@ -79,7 +81,6 @@ from factory.instances import (
 )
 from factory.models import FactoryConfig, SandboxMode, Task
 from factory.runs import RunRecorder, runs_path_for
-from factory.server import WebServer
 from factory.setup import run_setup
 
 DEFAULT_CONFIG = Path("factory.yaml")
@@ -411,18 +412,11 @@ def cmd_start(args: argparse.Namespace) -> int:
     async def _serve() -> None:
         daemon = FactoryDaemon(config, factory)
         loop = asyncio.get_running_loop()
-        web = WebServer(config, factory.backlog, daemon)
-        web.start(loop)
         for sig in (signal.SIGINT, signal.SIGTERM):
             try:
                 loop.add_signal_handler(sig, daemon.stop)
             except NotImplementedError:
                 pass
-        web_line = (
-            f"\n[bold]Web:[/bold] http://{config.web_host}:{config.web_port}"
-            if config.web_port
-            else ""
-        )
         console.print(
             Panel.fit(
                 f"[bold]Factory:[/bold] {config.name}\n"
@@ -430,16 +424,12 @@ def cmd_start(args: argparse.Namespace) -> int:
                 f"[bold]Interval:[/bold] {config.interval_minutes} min\n"
                 f"[bold]Backlog:[/bold] {config.backlog}\n"
                 f"[bold]Branch:[/bold] {config.branch}\n"
-                f"[bold]Log:[/bold] {config.log_file}"
-                f"{web_line}",
+                f"[bold]Log:[/bold] {config.log_file}",
                 title="Forgeo",
                 border_style="green",
             )
         )
-        try:
-            await daemon.run_forever()
-        finally:
-            web.stop()
+        await daemon.run_forever()
 
     try:
         asyncio.run(_serve())
