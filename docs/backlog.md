@@ -77,10 +77,11 @@ cheap/fast model and hard ones to a frontier model:
 | `FAILED` | The agent errored; changes were discarded. |
 
 You add, remove, or reopen tasks by editing the file directly — or use the
-**new-task form** in the [web console](web-console-api.md) (`POST
-/api/instances/<name>/tasks`), which assigns the next free `WEB-###` id for
-you. To retry a `BLOCKED` task, set its status back to `OPEN` — the factory
-picks it up on the next scheduled run.
+[web console](web-console-api.md): the **new-task form** (`POST
+/api/instances/<name>/tasks`) assigns the next free `WEB-###` id for you, and
+the task detail modal's **Edit** button updates an existing task's fields
+(`PATCH /api/instances/<name>/tasks/<id>`). To retry a `BLOCKED` task, set its
+status back to `OPEN` — the factory picks it up on the next scheduled run.
 
 ## Oldest-first ordering
 

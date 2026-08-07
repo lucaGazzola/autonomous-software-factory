@@ -19,6 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `/api/instances/<name>/`.
 - Shared web-server helpers (`factory.web_common`) used by the central
   dashboard.
+- Task editing in the web console: the task detail modal gained an **Edit**
+  mode (Save/Cancel), backed by a new `PATCH
+  /api/instances/<name>/tasks/<id>` endpoint and `JSONBacklog.update_task`.
 
 ### Changed
 
@@ -28,9 +31,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `daemon.state.json` next to the backlog after every cycle.
 - The central dashboard (`factory web`) is now the **only** web interface:
   it reads the daemon state files for accurate status, and it gained the
-  instance backlog's only write endpoint, `POST
-  /api/instances/<name>/tasks` (with the web form on each instance page), so
-  no feature was lost.
+  instance backlog's write endpoints, `POST
+  /api/instances/<name>/tasks` (with the web form on each instance page) and
+  `PATCH /api/instances/<name>/tasks/<id>`, so no feature was lost.
 - `factory.web_common` docstring/API updated; `factory.server` module
   removed.
 

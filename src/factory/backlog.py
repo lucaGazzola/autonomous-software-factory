@@ -24,6 +24,19 @@ from factory.models import Task, TaskStatus
 
 logger = logging.getLogger(__name__)
 
+#: The task fields the web console may edit through ``update_task``.
+EDITABLE_TASK_FIELDS = frozenset(
+    {
+        "title",
+        "description",
+        "acceptance_criteria",
+        "dependencies",
+        "files_to_modify",
+        "agent_command",
+        "agent_timeout_seconds",
+    }
+)
+
 
 def oldest_open_task(tasks: list[Task]) -> Task | None:
     """Return the oldest OPEN task (smallest ``created_at``), or ``None``."""
@@ -88,6 +101,57 @@ class JSONBacklog:
             if updated is not None:
                 await self._write(store)
         return updated
+
+    async def update_task(
+        self, task_id: str, updates: dict[str, Any]
+    ) -> Task | None:
+        """Update a task's editable fields, bumping its ``updated_at``.
+
+        ``updates`` may contain any of :data:`EDITABLE_TASK_FIELDS`; ``id``,
+        ``status``, ``created_at`` and ``updated_at`` are never replaced
+        (except ``updated_at``, bumped to now). Unknown fields and invalid
+        values raise a ``ValueError``; an unknown ``task_id`` returns ``None``
+        (mirroring :meth:`update_status`). Writes go through the same lock
+        and atomic-replace path as the other mutators.
+        """
+        if not isinstance(updates, dict):
+            raise TypeError("updates must be a dict of task fields")
+        unknown = set(updates) - EDITABLE_TASK_FIELDS
+        if unknown:
+            raise ValueError(
+                f"unknown task field(s): {', '.join(sorted(unknown))}"
+            )
+        for field in ("title", "description"):
+            if field in updates and not isinstance(updates[field], str):
+                raise ValueError(f"{field} must be a string")
+        if "title" in updates and not updates["title"].strip():
+            raise ValueError("title must be a non-blank string")
+        for field in ("acceptance_criteria", "dependencies", "files_to_modify"):
+            if field in updates and (
+                not isinstance(updates[field], list)
+                or not all(isinstance(item, str) for item in updates[field])
+            ):
+                raise ValueError(f"{field} must be a list of strings")
+
+        async with self._lock:
+            store = await self._read()
+            for entry in store["tasks"]:
+                if entry["id"] != task_id:
+                    continue
+                candidate = dict(entry)
+                candidate.update(updates)
+                candidate["updated_at"] = datetime.now(UTC).isoformat()
+                try:
+                    task = Task.model_validate(candidate)
+                except ValidationError as exc:
+                    raise ValueError(f"invalid task field(s): {exc}") from exc
+                normalized = task.model_dump(mode="json")
+                for field in updates:
+                    entry[field] = normalized[field]
+                entry["updated_at"] = normalized["updated_at"]
+                await self._write(store)
+                return task
+        return None
 
     # ------------------------------------------------------------------ #
     # Internal persistence helpers                                        #

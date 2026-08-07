@@ -34,7 +34,9 @@ static files in `src/factory/web/` are served at their URL paths.
   **blocker** and **config**. Clicking a task card opens a modal with the full
   task details (description, acceptance criteria, dependencies, files to
   modify, agent command, timestamps); it closes via the close button, the
-  backdrop, or Escape.
+  backdrop, or Escape. An **Edit** button switches the modal to an editable
+  form for those fields; **Save** persists the change via `PATCH` and
+  **Cancel** discards it.
 - `GET /style.css`, `/central/central.js`, `/central/central.css` — the
   shared dark theme and dashboard scripts (no frameworks).
 
@@ -125,6 +127,48 @@ Errors:
 - `409` with `{"error": "..."}` — the generated id already exists in the
   backlog (e.g. two concurrent requests raced).
 
+### `PATCH /api/instances/<name>/tasks/{id}`
+
+Update an existing task's editable fields: `title`, `description`,
+`acceptance_criteria`, `dependencies`, `files_to_modify`, `agent_command`,
+and `agent_timeout_seconds`. The request body is a JSON object; omitted fields
+are left unchanged and `id`, `status`, and `created_at` are always preserved.
+`agent_command` may be a string, an array, or `null` (clear the per-task
+override); `agent_timeout_seconds` may be a positive number or `null`.
+`updated_at` is bumped to the current time.
+
+```bash
+curl -X PATCH http://127.0.0.1:8790/api/instances/my-repo/tasks/TASK-001 \
+  -H 'Content-Type: application/json' \
+  -d '{"description": "Write a fibonacci module with tests.", "agent_timeout_seconds": 120}'
+```
+
+```json
+{
+  "id": "TASK-001",
+  "title": "Implement fibonacci module",
+  "description": "Write a fibonacci module with tests.",
+  "status": "OPEN",
+  "created_at": "2026-07-31T10:00:00Z",
+  "updated_at": "2026-08-01T12:00:00Z",
+  "dependencies": [],
+  "acceptance_criteria": [],
+  "files_to_modify": []
+}
+```
+
+Returns `200` with the updated task. The write is atomic (temp file +
+rename), so it is safe even while that instance's daemon is mid-cycle.
+Errors:
+
+- `400` with `{"error": "..."}` — unparseable or non-object body, an empty
+  body, an unknown field (e.g. `status`), or an invalid value (blank `title`,
+  wrong field types, a non-positive `agent_timeout_seconds`).
+- `404` with `{"error": "not found"}` — the task id does not exist in that
+  instance's backlog.
+- `404` with `{"error": "unknown instance"}` — the instance is not
+  registered.
+
 ### `GET /api/instances/<name>/status`
 
 Daemon status: name, repo, interval, `daemon_running` (whether the instance's
@@ -198,13 +242,14 @@ curl http://127.0.0.1:8790/api/instances/my-repo/blocker
 - A registered instance with missing data files renders with empty data and
   `daemon_running=false` instead of erroring — the instance page and every
   API endpoint still return `200`.
-- The only write endpoint is `POST /api/instances/<name>/tasks`, which
-  appends to the instance's backlog.
+- The write endpoints are `POST /api/instances/<name>/tasks` (append a task)
+  and `PATCH /api/instances/<name>/tasks/<id>` (update a task's editable
+  fields).
 
 ## Errors
 
-- `400` — malformed `POST` body (missing/blank title, unparseable body,
-  wrong field types).
+- `400` — malformed `POST`/`PATCH` body (missing/blank title, unparseable
+  body, wrong field types, unknown fields).
 - `404` — unknown API path, unknown instance, unknown task, or missing
   static file.
 - `409` — `POST` id collision (a concurrent request won the race).
@@ -222,6 +267,6 @@ curl -s http://127.0.0.1:8790/api/instances/my-repo/status
   visible from your LAN. Exposing it publicly (`--host 0.0.0.0` on a public
   interface) makes every instance's backlog, logs, and config visible to
   every host that can reach the port — only do that on a trusted network.
-- The only write endpoint is `POST /api/instances/<name>/tasks`, which
-  appends to an instance's backlog. A machine that can reach the port can add
-  tasks to any instance's queue.
+- The write endpoints are `POST /api/instances/<name>/tasks` and `PATCH
+  /api/instances/<name>/tasks/<id>`. A machine that can reach the port can
+  add tasks to any instance's queue and edit their fields.

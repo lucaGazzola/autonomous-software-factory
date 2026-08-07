@@ -93,32 +93,72 @@
         <span class="modal__id" id="task-modal-id"></span>
         <h2 class="modal__title" id="task-modal-title"></h2>
       </div>
-      <button class="modal__close" id="task-modal-close" type="button" aria-label="Close">&times;</button>
+      <div class="modal__head-actions">
+        <button class="modal__btn" id="task-modal-edit" type="button">Edit</button>
+        <button class="modal__close" id="task-modal-close" type="button" aria-label="Close">&times;</button>
+      </div>
     </header>
     <div class="modal__body">
-      <div>
-        <span class="badge" id="task-modal-status"></span>
+      <div id="task-modal-view">
+        <div>
+          <span class="badge" id="task-modal-status"></span>
+        </div>
+        <section class="modal__section" id="task-modal-description-section" hidden>
+          <h3>Description</h3>
+          <p class="modal__desc" id="task-modal-description"></p>
+        </section>
+        <section class="modal__section" id="task-modal-acceptance-section" hidden>
+          <h3>Acceptance criteria</h3>
+          <ul class="modal__list" id="task-modal-acceptance"></ul>
+        </section>
+        <section class="modal__section" id="task-modal-dependencies-section" hidden>
+          <h3>Dependencies</h3>
+          <ul class="modal__list" id="task-modal-dependencies"></ul>
+        </section>
+        <section class="modal__section" id="task-modal-files-section" hidden>
+          <h3>Files to modify</h3>
+          <ul class="modal__list" id="task-modal-files"></ul>
+        </section>
+        <section class="modal__section" id="task-modal-command-section" hidden>
+          <h3>Agent command</h3>
+          <pre class="modal__command" id="task-modal-command"></pre>
+        </section>
       </div>
-      <section class="modal__section" id="task-modal-description-section" hidden>
-        <h3>Description</h3>
-        <p class="modal__desc" id="task-modal-description"></p>
-      </section>
-      <section class="modal__section" id="task-modal-acceptance-section" hidden>
-        <h3>Acceptance criteria</h3>
-        <ul class="modal__list" id="task-modal-acceptance"></ul>
-      </section>
-      <section class="modal__section" id="task-modal-dependencies-section" hidden>
-        <h3>Dependencies</h3>
-        <ul class="modal__list" id="task-modal-dependencies"></ul>
-      </section>
-      <section class="modal__section" id="task-modal-files-section" hidden>
-        <h3>Files to modify</h3>
-        <ul class="modal__list" id="task-modal-files"></ul>
-      </section>
-      <section class="modal__section" id="task-modal-command-section" hidden>
-        <h3>Agent command</h3>
-        <pre class="modal__command" id="task-modal-command"></pre>
-      </section>
+      <form class="modal__edit" id="task-modal-edit-form" hidden>
+        <div class="modal__edit-field">
+          <label for="task-edit-title">Title</label>
+          <input id="task-edit-title" name="title" type="text" autocomplete="off">
+        </div>
+        <div class="modal__edit-field">
+          <label for="task-edit-description">Description</label>
+          <textarea id="task-edit-description" name="description" rows="3"></textarea>
+        </div>
+        <div class="modal__edit-field">
+          <label for="task-edit-acceptance">Acceptance criteria (one per line)</label>
+          <textarea id="task-edit-acceptance" name="acceptance_criteria" rows="3"></textarea>
+        </div>
+        <div class="modal__edit-field">
+          <label for="task-edit-dependencies">Dependencies (one per line)</label>
+          <textarea id="task-edit-dependencies" name="dependencies" rows="3"></textarea>
+        </div>
+        <div class="modal__edit-field">
+          <label for="task-edit-files">Files to modify (one per line)</label>
+          <textarea id="task-edit-files" name="files_to_modify" rows="3"></textarea>
+        </div>
+        <div class="modal__edit-field">
+          <label for="task-edit-command">Agent command</label>
+          <input id="task-edit-command" name="agent_command" type="text" autocomplete="off">
+        </div>
+        <div class="modal__edit-field">
+          <label for="task-edit-timeout">Agent timeout (seconds)</label>
+          <input id="task-edit-timeout" name="agent_timeout_seconds" type="text" autocomplete="off">
+        </div>
+        <p class="modal__error" id="task-modal-error" hidden></p>
+        <div class="modal__edit-actions">
+          <button class="modal__btn" id="task-modal-cancel" type="button">Cancel</button>
+          <button class="modal__btn modal__btn--primary" id="task-modal-save" type="submit">Save</button>
+        </div>
+      </form>
       <div class="modal__times">
         <span>created <time id="task-modal-created"></time></span>
         <span>updated <time id="task-modal-updated"></time></span>

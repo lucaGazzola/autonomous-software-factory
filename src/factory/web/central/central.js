@@ -249,6 +249,7 @@
   /* ------------------------------------------------------------------ */
 
   var modalTaskId = null;
+  var modalTask = null;
   var modalLastFocus = null;
 
   function listItems(values) {
@@ -270,6 +271,7 @@
 
   function renderModal(task) {
     if (!task) return;
+    modalTask = task;
     setText("task-modal-id", task.id);
     setText("task-modal-title", task.title || "");
     var badge = document.getElementById("task-modal-status");
@@ -322,10 +324,129 @@
     showModalSection("task-modal-command-section", Boolean(task.agent_command));
   }
 
+  function splitLines(value) {
+    return String(value)
+      .split(/\r?\n/)
+      .map(function (line) {
+        return line.trim();
+      })
+      .filter(Boolean);
+  }
+
+  function enterEditMode() {
+    if (!modalTask) return;
+    var setValue = function (id, text) {
+      var node = document.getElementById(id);
+      if (node) node.value = text;
+    };
+    setValue("task-edit-title", modalTask.title || "");
+    setValue("task-edit-description", modalTask.description || "");
+    setValue("task-edit-acceptance", (modalTask.acceptance_criteria || []).join("\n"));
+    setValue("task-edit-dependencies", (modalTask.dependencies || []).join("\n"));
+    setValue("task-edit-files", (modalTask.files_to_modify || []).join("\n"));
+    setValue(
+      "task-edit-command",
+      Array.isArray(modalTask.agent_command)
+        ? modalTask.agent_command.join(" ")
+        : modalTask.agent_command || ""
+    );
+    setValue(
+      "task-edit-timeout",
+      modalTask.agent_timeout_seconds === null || modalTask.agent_timeout_seconds === undefined
+        ? ""
+        : String(modalTask.agent_timeout_seconds)
+    );
+
+    showModalSection("task-modal-view", false);
+    showModalSection("task-modal-edit-form", true);
+    showModalSection("task-modal-edit", false);
+    var error = document.getElementById("task-modal-error");
+    if (error) error.hidden = true;
+  }
+
+  function exitEditMode() {
+    showModalSection("task-modal-view", true);
+    showModalSection("task-modal-edit-form", false);
+    showModalSection("task-modal-edit", true);
+    var error = document.getElementById("task-modal-error");
+    if (error) error.hidden = true;
+  }
+
+  function collectEditForm() {
+    var value = function (id) {
+      var node = document.getElementById(id);
+      return node ? node.value : "";
+    };
+    var command = value("task-edit-command").trim();
+    var timeout = value("task-edit-timeout").trim();
+    var updates = {
+      title: value("task-edit-title").trim(),
+      description: value("task-edit-description").trim(),
+      acceptance_criteria: splitLines(value("task-edit-acceptance")),
+      dependencies: splitLines(value("task-edit-dependencies")),
+      files_to_modify: splitLines(value("task-edit-files")),
+      agent_command: command ? command : null,
+      agent_timeout_seconds: timeout === "" ? null : Number(timeout),
+    };
+    return updates;
+  }
+
+  function saveTask() {
+    if (!API || !modalTaskId) return;
+    var error = document.getElementById("task-modal-error");
+    if (error) error.hidden = true;
+
+    var title = document.getElementById("task-edit-title");
+    if (!title || !title.value.trim()) {
+      if (error) {
+        error.textContent = "title is required";
+        error.hidden = false;
+      }
+      return;
+    }
+    var timeout = document.getElementById("task-edit-timeout");
+    if (timeout && timeout.value.trim() !== "" && isNaN(Number(timeout.value))) {
+      if (error) {
+        error.textContent = "agent timeout must be a number";
+        error.hidden = false;
+      }
+      return;
+    }
+
+    fetch(API + "tasks/" + encodeURIComponent(modalTaskId), {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(collectEditForm()),
+    })
+      .then(function (resp) {
+        if (!resp.ok) {
+          return resp.json().then(function (data) {
+            throw new Error((data && data.error) || "HTTP " + resp.status);
+          });
+        }
+        return resp.json();
+      })
+      .then(function (task) {
+        renderModal(task);
+        exitEditMode();
+        return fetchJSON(API + "tasks");
+      })
+      .then(function (tasks) {
+        renderTasks(tasks || []);
+      })
+      .catch(function (err) {
+        if (error) {
+          error.textContent = err.message || "failed to save task";
+          error.hidden = false;
+        }
+      });
+  }
+
   function openModal(task, opener) {
     if (!task) return;
     modalTaskId = task.id;
     modalLastFocus = opener || document.activeElement;
+    exitEditMode();
     renderModal(task);
     var modal = document.getElementById("task-modal");
     if (modal) {
@@ -555,6 +676,17 @@
 
       var closeBtn = document.getElementById("task-modal-close");
       if (closeBtn) closeBtn.addEventListener("click", closeModal);
+      var editBtn = document.getElementById("task-modal-edit");
+      if (editBtn) editBtn.addEventListener("click", enterEditMode);
+      var cancelBtn = document.getElementById("task-modal-cancel");
+      if (cancelBtn) cancelBtn.addEventListener("click", exitEditMode);
+      var editForm = document.getElementById("task-modal-edit-form");
+      if (editForm) {
+        editForm.addEventListener("submit", function (event) {
+          event.preventDefault();
+          saveTask();
+        });
+      }
       var modal = document.getElementById("task-modal");
       if (modal) {
         modal.addEventListener("click", function (event) {

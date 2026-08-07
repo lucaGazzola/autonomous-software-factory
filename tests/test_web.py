@@ -59,6 +59,26 @@ def _post(url: str, data: str | None) -> tuple[int, dict | list | str]:
             return exc.code, resp_body
 
 
+def _patch(url: str, data: str | None) -> tuple[int, dict | list | str]:
+    body = data.encode("utf-8") if data is not None else None
+    request = urllib.request.Request(url, data=body, method="PATCH")
+    if body is not None:
+        request.add_header("Content-Type", "application/json")
+    try:
+        with urllib.request.urlopen(request, timeout=5) as resp:
+            resp_body = resp.read().decode("utf-8")
+            ctype = resp.headers.get_content_type()
+            if ctype == "application/json":
+                return resp.status, json.loads(resp_body)
+            return resp.status, resp_body
+    except urllib.error.HTTPError as exc:
+        resp_body = exc.read().decode("utf-8")
+        try:
+            return exc.code, json.loads(resp_body)
+        except json.JSONDecodeError:
+            return exc.code, resp_body
+
+
 def task_json(task_id: str, title: str, status: TaskStatus) -> dict:
     return make_task(
         id=task_id,
@@ -216,6 +236,18 @@ def test_instance_page_has_new_task_form(web_env):
     assert "new-task" not in backlog_panel
     create_panel = body.split('<main id="tab-create"')[1].split("</main>")[0]
     assert 'id="new-task"' in create_panel
+
+
+def test_instance_page_has_task_edit_modal(web_env):
+    server, _ = web_env
+    status, body = _get(f"http://127.0.0.1:{server.port}/instances/alpha/")
+    assert status == 200
+    assert 'id="task-modal-edit"' in body
+    assert 'id="task-modal-edit-form"' in body
+    assert 'id="task-modal-save"' in body
+    assert 'id="task-modal-cancel"' in body
+    assert 'id="task-edit-title"' in body
+    assert 'id="task-edit-timeout"' in body
 
 
 def test_unknown_instance_returns_404(web_env):
@@ -449,6 +481,158 @@ def test_post_task_does_not_leak_failed_task(web_env, monkeypatch):
     status, tasks = _get(f"http://127.0.0.1:{server.port}/api/instances/alpha/tasks")
     assert status == 200
     assert [t["id"] for t in tasks] == ["TASK-001", "TASK-002"]
+
+
+def test_patch_task_updates_fields(web_env):
+    server, registry = web_env
+    url = f"http://127.0.0.1:{server.port}/api/instances/alpha/tasks/TASK-001"
+    _, before = _get(url)
+    status, data = _patch(
+        url,
+        json.dumps(
+            {
+                "title": "Updated first",
+                "description": "Now updated.",
+                "acceptance_criteria": ["tests pass"],
+                "dependencies": ["D-1"],
+                "files_to_modify": ["src/app.py"],
+                "agent_command": "claude -p",
+                "agent_timeout_seconds": 60,
+            }
+        ),
+    )
+    assert status == 200
+    assert data["id"] == before["id"]
+    assert data["status"] == before["status"]
+    assert data["created_at"] == before["created_at"]
+    assert data["title"] == "Updated first"
+    assert data["description"] == "Now updated."
+    assert data["acceptance_criteria"] == ["tests pass"]
+    assert data["dependencies"] == ["D-1"]
+    assert data["files_to_modify"] == ["src/app.py"]
+    assert data["agent_command"] == "claude -p"
+    assert data["agent_timeout_seconds"] == 60
+    assert data["updated_at"] >= before["updated_at"]
+
+    status, tasks = _get(f"http://127.0.0.1:{server.port}/api/instances/alpha/tasks")
+    assert status == 200
+    assert [t["id"] for t in tasks] == ["TASK-001", "TASK-002"]
+    updated = next(t for t in tasks if t["id"] == "TASK-001")
+    assert updated["title"] == "Updated first"
+    assert updated["description"] == "Now updated."
+
+    disk = json.loads(
+        (registry / "alpha" / "backlog.json").read_text(encoding="utf-8")
+    )
+    entry = next(t for t in disk["tasks"] if t["id"] == "TASK-001")
+    assert entry["title"] == "Updated first"
+    assert entry["status"] == "OPEN"
+    assert entry["created_at"] == before["created_at"]
+
+
+def test_patch_task_partial_update(web_env):
+    server, _ = web_env
+    url = f"http://127.0.0.1:{server.port}/api/instances/alpha/tasks/TASK-002"
+    _, before = _get(url)
+    status, data = _patch(url, json.dumps({"description": "Only desc"}))
+    assert status == 200
+    assert data["title"] == before["title"]
+    assert data["description"] == "Only desc"
+    assert data["status"] == before["status"]
+    assert data["created_at"] == before["created_at"]
+    assert data["acceptance_criteria"] == before["acceptance_criteria"]
+
+
+def test_patch_task_clears_optional_fields(web_env):
+    server, _ = web_env
+    url = f"http://127.0.0.1:{server.port}/api/instances/alpha/tasks/TASK-001"
+    status, data = _patch(
+        url, json.dumps({"agent_command": None, "agent_timeout_seconds": None})
+    )
+    assert status == 200
+    assert data["agent_command"] is None
+    assert data["agent_timeout_seconds"] is None
+
+
+def test_patch_task_unknown_id_404(web_env):
+    server, _ = web_env
+    status, data = _patch(
+        f"http://127.0.0.1:{server.port}/api/instances/alpha/tasks/MISSING",
+        json.dumps({"title": "Nope"}),
+    )
+    assert status == 404
+    assert data["error"] == "not found"
+
+
+def test_patch_task_validation_errors(web_env):
+    server, _ = web_env
+    url = f"http://127.0.0.1:{server.port}/api/instances/alpha/tasks/TASK-001"
+    for payload in (
+        {"title": ""},
+        {"title": "   "},
+        {"title": 42},
+        {"description": ["bad"]},
+        {"acceptance_criteria": "nope"},
+        {"acceptance_criteria": [1]},
+        {"dependencies": 7},
+        {"files_to_modify": "x"},
+        {"agent_command": ""},
+        {"agent_command": []},
+        {"agent_timeout_seconds": 0},
+        {"agent_timeout_seconds": -5},
+        {"status": "COMPLETED"},
+        {"bogus": 1},
+    ):
+        status, data = _patch(url, json.dumps(payload))
+        assert status == 400, payload
+        assert data["error"]
+
+    status, data = _patch(url, "{not json")
+    assert status == 400
+    assert data["error"]
+
+    status, data = _patch(url, "[1, 2]")
+    assert status == 400
+    assert data["error"]
+
+    status, data = _patch(url, None)
+    assert status == 400
+    assert data["error"]
+
+    status, data = _patch(url, json.dumps({}))
+    assert status == 400
+    assert data["error"]
+
+    status, task = _get(url)
+    assert status == 200
+    assert task["title"] == "First"
+    assert task["description"] == "Build it."
+
+
+def test_patch_task_unknown_instance_404(web_env):
+    server, _ = web_env
+    status, data = _patch(
+        f"http://127.0.0.1:{server.port}/api/instances/nope/tasks/TASK-001",
+        json.dumps({"title": "x"}),
+    )
+    assert status == 404
+    assert data["error"] == "unknown instance"
+
+
+def test_patch_task_wrong_path_404(web_env):
+    server, _ = web_env
+    status, data = _patch(
+        f"http://127.0.0.1:{server.port}/api/instances/alpha/bogus",
+        json.dumps({"title": "x"}),
+    )
+    assert status == 404
+    assert data["error"] == "not found"
+
+    status, data = _patch(
+        f"http://127.0.0.1:{server.port}/instances/alpha/",
+        json.dumps({"title": "x"}),
+    )
+    assert status == 404
 
 
 def test_web_task_id_for():

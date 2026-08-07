@@ -18,7 +18,10 @@ Routes:
   ``/logs?lines=N``, ``/runs?limit=N``, ``/blocker``, ``/config`` — the
   per-instance API.
 * ``POST /api/instances/<name>/tasks`` — add a new task to that instance's
-  backlog (the only write endpoint).
+  backlog.
+* ``PATCH /api/instances/<name>/tasks/<id>`` — update an existing task's
+  editable fields (title, description, acceptance criteria, dependencies,
+  files to modify, agent command, agent timeout).
 
 An unknown instance name returns ``404``; a registered instance with missing
 data files renders with empty data and ``daemon_running=false`` rather than
@@ -307,6 +310,19 @@ def make_handler() -> type[BaseHTTPRequestHandler]:
                 logger.exception("Web request failed: %s", path)
                 self._send_json(500, {"error": "internal server error"})
 
+        def do_PATCH(self) -> None:
+            parsed = urlparse(self.path)
+            path = parsed.path
+
+            try:
+                if path.startswith("/api/instances/"):
+                    self._patch_instance_task(path)
+                    return
+                self._send_json(404, {"error": "not found"})
+            except Exception:
+                logger.exception("Web request failed: %s", path)
+                self._send_json(500, {"error": "internal server error"})
+
         def _post_instance_task(self, path: str) -> None:
             """Create a task in an instance's backlog from a JSON body."""
             parts = path[len("/api/instances/") :].split("/")
@@ -373,6 +389,55 @@ def make_handler() -> type[BaseHTTPRequestHandler]:
                 )
                 return
             self._send_json(201, created.model_dump(mode="json"))
+
+        def _patch_instance_task(self, path: str) -> None:
+            """Update a task in an instance's backlog from a JSON body."""
+            parts = path[len("/api/instances/") :].split("/")
+            name = unquote(parts[0])
+            info = get_instance(name)
+            if info is None:
+                self._send_json(404, {"error": "unknown instance"})
+                return
+            if len(parts) != 3 or parts[1] != "tasks":
+                self._send_json(404, {"error": "not found"})
+                return
+            if info.config is None:
+                self._send_json(500, {"error": "instance config not available"})
+                return
+            task_id = unquote(parts[2])
+
+            raw_length = self.headers.get("Content-Length")
+            if raw_length is None:
+                self._send_json(400, {"error": "request body is required"})
+                return
+            try:
+                length = int(raw_length)
+            except ValueError:
+                self._send_json(400, {"error": "invalid Content-Length"})
+                return
+            body = self.rfile.read(max(length, 0))
+            try:
+                payload = json.loads(body.decode("utf-8"))
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                self._send_json(400, {"error": "request body must be JSON"})
+                return
+            if not isinstance(payload, dict):
+                self._send_json(400, {"error": "request body must be a JSON object"})
+                return
+            if not payload:
+                self._send_json(400, {"error": "request body must not be empty"})
+                return
+
+            backlog = JSONBacklog(info.config.backlog)
+            try:
+                updated = asyncio.run(backlog.update_task(task_id, payload))
+            except ValueError as exc:
+                self._send_json(400, {"error": str(exc)})
+                return
+            if updated is None:
+                self._send_json(404, {"error": "not found"})
+                return
+            self._send_json(200, updated.model_dump(mode="json"))
 
         def _handle_instance_page(self, path: str) -> None:
             name = unquote(path[len("/instances/") :]).strip("/")

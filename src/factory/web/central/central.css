@@ -253,6 +253,118 @@
   text-decoration: underline;
 }
 
+/* ---------- Task detail modal: edit mode ---------- */
+
+#task-modal-view {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+#task-modal-view[hidden] {
+  display: none;
+}
+
+.modal__head-actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.modal__btn {
+  appearance: none;
+  background: var(--surface-hover);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 6px 14px;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.modal__btn:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+  background: var(--border);
+}
+
+.modal__btn--primary {
+  background: var(--accent-dim);
+  border-color: rgba(124, 140, 255, 0.45);
+  color: var(--accent);
+}
+
+.modal__btn--primary:hover {
+  background: rgba(124, 140, 255, 0.24);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.modal__edit {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.modal__edit[hidden] {
+  display: none;
+}
+
+.modal__edit-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.modal__edit-field label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text-faint);
+}
+
+.modal__edit-field input,
+.modal__edit-field textarea {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  padding: 8px 10px;
+  outline: none;
+  resize: vertical;
+  transition: border-color 0.18s ease, background 0.18s ease;
+}
+
+.modal__edit-field input:focus,
+.modal__edit-field textarea:focus {
+  border-color: var(--accent);
+  background: var(--surface-hover);
+}
+
+.modal__edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.modal__error {
+  margin: 0;
+  font-size: 13px;
+  color: var(--failed);
+}
+
+.modal__error[hidden] {
+  display: none;
+}
+
 /* ---------- Responsive ---------- */
 
 @media (max-width: 860px) {
