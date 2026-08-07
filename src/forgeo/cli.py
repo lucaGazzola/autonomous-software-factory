@@ -370,13 +370,15 @@ def _make_forgeo(config: ForgeoConfig) -> Forgeo:
 
 
 def _prepare_worker(
-    args: argparse.Namespace,
+    args: argparse.Namespace, *, register: bool = False
 ) -> tuple[Path, ForgeoConfig, Forgeo, Any] | None:
     """Resolve the config, take the run lock, and build Forgeo.
 
-    Shared by ``start`` and ``once``. Returns ``None`` (after printing an
-    error) when any step fails; on success the caller owns the lock and must
-    close it.
+    Shared by ``start`` and ``once``. With ``register=True`` the instance is
+    added to the registry *before* the run lock is taken, so a visible lock
+    always implies a registered instance. Returns ``None`` (after printing
+    an error) when any step fails; on success the caller owns the lock and
+    must close it.
     """
     config_path = _resolved_config_path(args)
     if config_path is None:
@@ -384,6 +386,8 @@ def _prepare_worker(
     config = _resolve_config(args)
     if config is None:
         return None
+    if register:
+        _register_if_missing(args, config_path, config)
     setup_logging(config.log_file)
     log = logging.getLogger("forgeo.cli")
     log.info("Loading forgeo config from %s", config_path)
@@ -402,11 +406,10 @@ def _prepare_worker(
 
 def cmd_start(args: argparse.Namespace) -> int:
     """Handle ``forgeo start``: the persistent scheduled worker."""
-    prepared = _prepare_worker(args)
+    prepared = _prepare_worker(args, register=True)
     if prepared is None:
         return 1
-    config_path, config, forgeo, lock = prepared
-    _register_if_missing(args, config_path, config)
+    _config_path, config, forgeo, lock = prepared
 
     async def _serve() -> None:
         daemon = ForgeoDaemon(config, forgeo)
