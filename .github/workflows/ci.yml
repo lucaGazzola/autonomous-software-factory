@@ -24,7 +24,7 @@ jobs:
       - name: Lint with ruff
         run: ruff check src tests
       - name: Type check with mypy
-        run: python -m mypy src/factory
+        run: python -m mypy src/forgeo
       - name: Test with pytest
         run: python -m pytest
 
@@ -36,17 +36,17 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            asset: factory-linux-amd64
-            binary: dist/factory
+            asset: forgeo-linux-amd64
+            binary: dist/forgeo
           - os: macos-15-intel
-            asset: factory-darwin-amd64
-            binary: dist/factory
+            asset: forgeo-darwin-amd64
+            binary: dist/forgeo
           - os: macos-latest
-            asset: factory-darwin-arm64
-            binary: dist/factory
+            asset: forgeo-darwin-arm64
+            binary: dist/forgeo
           - os: windows-latest
-            asset: factory-windows-amd64.exe
-            binary: dist/factory.exe
+            asset: forgeo-windows-amd64.exe
+            binary: dist/forgeo.exe
     permissions:
       contents: read
     steps:

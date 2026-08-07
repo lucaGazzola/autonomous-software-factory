@@ -480,7 +480,7 @@
   }
 
   function renderStatus(status) {
-    setText("factory-name", status.name || instanceName);
+    setText("forgeo-name", status.name || instanceName);
     var daemon = Boolean(status.daemon_running);
     var badge = document.getElementById("meta-daemon");
     if (badge) {

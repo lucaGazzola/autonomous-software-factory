@@ -10,7 +10,7 @@
 [![CI](https://github.com/lucaGazzola/forgeo/actions/workflows/ci.yml/badge.svg)](https://github.com/lucaGazzola/forgeo/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**Forgeo is an autonomous software factory for people with ideas, not teams.**
+**Forgeo is an autonomous software forgeo for people with ideas, not teams.**
 You have a product idea — an app, a website, an internal automation — but no
 developers on staff. With Forgeo you don't need any: you write down what needs
 to be built as a simple list of tasks, and an AI coding agent works through the
@@ -36,44 +36,44 @@ prebuilt binary for your OS). The full walkthrough is in
 # 1. Install
 curl -fsSL https://forgeo.org/install.sh | bash
 
-# 2. Create your factory (guided wizard, run from your project root)
-factory init
+# 2. Create your Forgeo (guided wizard, run from your project root)
+forgeo init
 
-# 3. Start the factory
-factory start   # run forever: every interval_minutes, implement the oldest OPEN task
+# 3. Start Forgeo
+forgeo start   # run forever: every interval_minutes, implement the oldest OPEN task
 ```
 
-`factory init` writes `factory.yaml` and a `.factory/` folder for the backlog
+`forgeo init` writes `forgeo.yaml` and a `.forgeo/` folder for the backlog
 and logs, gitignored for you. Fill the backlog with plain JSON tasks (see
 [Backlog format](docs/backlog.md)) — or add them from the web console while
-it runs — and the factory does the rest. The daemon binds no ports; open the
-dashboard with `factory web` (default <http://0.0.0.0:8790>):
+it runs — and Forgeo does the rest. The daemon binds no ports; open the
+dashboard with `forgeo web` (default <http://0.0.0.0:8790>):
 
 ![Forgeo web console](docs/img/console.png)
 
-One-off commands: `factory once` (single cycle), `factory status` (summary),
-`factory stop`, `factory restart` — every command is in the
+One-off commands: `forgeo once` (single cycle), `forgeo status` (summary),
+`forgeo stop`, `forgeo restart` — every command is in the
 [CLI reference](docs/cli-reference.md).
 
 You can run several factories at once, one per repository — each config is
-fully independent (own backlog, logs, locks). Register each `factory.yaml`
-in the instance registry with `factory instance add NAME --config PATH`,
-manage any of them by name with `factory start/status/stop --name NAME`,
-list them all with `factory list`, and get one aggregate overview with the
-central dashboard, `factory web`.
+fully independent (own backlog, logs, locks). Register each `forgeo.yaml`
+in the instance registry with `forgeo instance add NAME --config PATH`,
+manage any of them by name with `forgeo start/status/stop --name NAME`,
+list them all with `forgeo list`, and get one aggregate overview with the
+central dashboard, `forgeo web`.
 
 ## Documentation
 
 | Topic | Where |
 | --- | --- |
 | Install, init, first cycle | [Getting started](docs/getting-started.md) |
-| Every `factory.yaml` key | [Configuration](docs/configuration.md) |
+| Every `forgeo.yaml` key | [Configuration](docs/configuration.md) |
 | Task schema and statuses | [Backlog format](docs/backlog.md) |
 | How the agent is invoked (env, exit codes, timeouts) | [Agent contract](docs/agent-contract.md) |
 | All CLI commands | [CLI reference](docs/cli-reference.md) |
 | Web dashboard & HTTP API | [Web console & HTTP API](docs/web-console-api.md) |
 
-Everything is stored in plain files: the backlog, `factory.log`, and
+Everything is stored in plain files: the backlog, `forgeo.log`, and
 `BLOCKER.md` whenever a decision is pending.
 
 ## Develop
@@ -84,7 +84,7 @@ pytest
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the development setup, quality
-gates (`pytest`, `ruff check`, `mypy src/factory`), and the pull-request
+gates (`pytest`, `ruff check`, `mypy src/forgeo`), and the pull-request
 process.
 
 ## License

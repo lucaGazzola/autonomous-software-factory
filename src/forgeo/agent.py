@@ -1,7 +1,7 @@
 """The coding agent: any shell command that implements the task.
 
 The configured command is run with the repository as its working directory.
-The task is delivered to the agent as the ``FACTORY_TASK`` environment
+The task is delivered to the agent as the ``FORGEO_TASK`` environment
 variable (title, description, acceptance criteria) so any CLI coding tool
 (aider, claude, a custom script, ...) can consume it. The exit code decides
 the outcome:
@@ -22,7 +22,7 @@ import signal
 from abc import ABC, abstractmethod
 from collections import deque
 
-from factory.models import ExecutionResult, ExecutionStatus, RepoContext, Task
+from forgeo.models import ExecutionResult, ExecutionStatus, RepoContext, Task
 
 # Keep only the most recent process output lines so a chatty agent cannot
 # blow memory; header/footer status lines are added around this window.
@@ -31,7 +31,7 @@ _MAX_OUTPUT_LINES = 1000
 # Hard cap on how long we wait for the output streams to reach EOF after the
 # process is done (or killed). Grandchildren that escaped the process group
 # (daemonized agents, docker containers) may hold the pipes open forever;
-# the factory must never hang on that.
+# Forgeo must never hang on that.
 _DEFAULT_DRAIN_TIMEOUT_SECONDS = 30.0
 
 
@@ -83,7 +83,7 @@ class BaseAgent(ABC):
 
 
 class ShellAgent(BaseAgent):
-    """Runs ``FactoryConfig.agent_command`` in a subprocess."""
+    """Runs ``ForgeoConfig.agent_command`` in a subprocess."""
 
     name = "shell"
 
@@ -167,9 +167,9 @@ class ShellAgent(BaseAgent):
         env = {
             **os.environ,
             **self.env,
-            "FACTORY_TASK": task.instruction,
-            "FACTORY_REPO": str(context.repo_path),
-            "FACTORY_BRANCH": context.branch,
+            "FORGEO_TASK": task.instruction,
+            "FORGEO_REPO": str(context.repo_path),
+            "FORGEO_BRANCH": context.branch,
         }
 
         try:
@@ -198,7 +198,7 @@ class ShellAgent(BaseAgent):
         # Always finish draining so lines already written (and any residual
         # after kill) are captured before we build the result. Bounded: a
         # grandchild that escaped the process group (daemonized agent, docker
-        # container) may hold the pipes open, and the factory must never hang
+        # container) may hold the pipes open, and Forgeo must never hang
         # waiting for EOF that will not come.
         try:
             await asyncio.wait_for(readers, timeout=self.drain_timeout_seconds)
@@ -245,14 +245,14 @@ class ShellAgent(BaseAgent):
 
 
 # Environment variables set by ``run_task`` and forwarded into the container.
-_SANDBOX_FORWARDED_ENV = ("FACTORY_TASK", "FACTORY_REPO", "FACTORY_BRANCH")
+_SANDBOX_FORWARDED_ENV = ("FORGEO_TASK", "FORGEO_REPO", "FORGEO_BRANCH")
 
 
 class DockerSandboxAgent(ShellAgent):
     """Runs the agent command inside a ``docker run --rm`` container.
 
     The repository is bind-mounted at its absolute path (so the agent's edits
-    land on the host checkout), ``FACTORY_TASK`` and ``agent_env`` are passed
+    land on the host checkout), ``FORGEO_TASK`` and ``agent_env`` are passed
     through as environment variables, and networking is disabled
     (``--network none``) unless a network is configured explicitly. Agent
     credentials/config are only visible inside the container when listed in

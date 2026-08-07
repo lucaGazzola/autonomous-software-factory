@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from factory.git import GitError, GitManager
+from forgeo.git import GitError, GitManager
 from tests.conftest import git
 
 
@@ -19,15 +19,15 @@ async def test_ensure_branch_switches_and_creates(git_repo):
 async def test_commit_all_returns_sha_and_cleans_tree(git_repo):
     manager = GitManager(git_repo)
     (git_repo / "new.txt").write_text("hello\n", encoding="utf-8")
-    sha = await manager.a_commit_all("factory: test commit")
+    sha = await manager.a_commit_all("forgeo: test commit")
     assert sha
     assert await manager.a_is_clean()
-    assert git(git_repo, "log", "-1", "--format=%s") == "factory: test commit"
+    assert git(git_repo, "log", "-1", "--format=%s") == "forgeo: test commit"
 
 
 async def test_commit_all_with_no_changes_returns_none(git_repo):
     manager = GitManager(git_repo)
-    assert await manager.a_commit_all("factory: nothing") is None
+    assert await manager.a_commit_all("forgeo: nothing") is None
 
 
 async def test_is_clean_detects_dirty_tree(git_repo):

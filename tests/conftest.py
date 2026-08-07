@@ -1,5 +1,5 @@
 """Shared fixtures: a real git repository, a scriptable fake agent, and
-factories for configs, tasks, and the Factory wiring used across suites."""
+factories for configs, tasks, and the Forgeo wiring used across suites."""
 
 from __future__ import annotations
 
@@ -9,14 +9,14 @@ from pathlib import Path
 
 import pytest
 
-from factory.agent import BaseAgent
-from factory.backlog import JSONBacklog
-from factory.factory import Factory
-from factory.git import GitManager
-from factory.models import (
+from forgeo.agent import BaseAgent
+from forgeo.backlog import JSONBacklog
+from forgeo.forgeo import Forgeo
+from forgeo.git import GitManager
+from forgeo.models import (
     ExecutionResult,
     ExecutionStatus,
-    FactoryConfig,
+    ForgeoConfig,
     RepoContext,
     Task,
 )
@@ -39,8 +39,8 @@ def git_repo(tmp_path: Path) -> Path:
     repo = tmp_path / "repo"
     repo.mkdir()
     git(repo, "init", "-b", "main")
-    git(repo, "config", "user.email", "factory@test.local")
-    git(repo, "config", "user.name", "Factory Test")
+    git(repo, "config", "user.email", "forgeo@test.local")
+    git(repo, "config", "user.name", "Forgeo Test")
     (repo / "app.py").write_text("def answer():\n    return 42\n", encoding="utf-8")
     git(repo, "add", "-A")
     git(repo, "commit", "-m", "initial")
@@ -73,8 +73,8 @@ class FakeAgent(BaseAgent):
         return self.result
 
 
-class FakeFactory:
-    """A runnable stand-in for :class:`Factory`: counts cycles, can block or crash."""
+class FakeForgeo:
+    """A runnable stand-in for :class:`Forgeo`: counts cycles, can block or crash."""
 
     def __init__(self) -> None:
         self.cycles = 0
@@ -92,17 +92,17 @@ class FakeFactory:
         return "task"
 
 
-def make_config(git_repo: Path, tmp_path: Path, **overrides) -> FactoryConfig:
-    """A factory config wired to the fixture repo and an out-of-repo backlog."""
+def make_config(git_repo: Path, tmp_path: Path, **overrides) -> ForgeoConfig:
+    """A forgeo config wired to the fixture repo and an out-of-repo backlog."""
     defaults = {
-        "name": "test-factory",
+        "name": "test-forgeo",
         "repo": git_repo,
         "backlog": tmp_path / "backlog.json",
         "blocker_file": tmp_path / "BLOCKER.md",
         "agent_command": "echo hi",
     }
     defaults.update(overrides)
-    return FactoryConfig(**defaults)
+    return ForgeoConfig(**defaults)
 
 
 def make_task(**overrides) -> Task:
@@ -111,12 +111,12 @@ def make_task(**overrides) -> Task:
     return Task(**defaults)
 
 
-def make_factory(
+def make_forgeo(
     git_repo: Path, tmp_path: Path, **overrides
-) -> tuple[Factory, FakeAgent, JSONBacklog]:
-    """A real :class:`Factory` wired to the fixture repo and a fake agent."""
+) -> tuple[Forgeo, FakeAgent, JSONBacklog]:
+    """A real :class:`Forgeo` wired to the fixture repo and a fake agent."""
     config = make_config(git_repo, tmp_path, **overrides)
     agent = FakeAgent()
     backlog = JSONBacklog(config.backlog)
-    factory = Factory(config, backlog, agent, GitManager(git_repo))
-    return factory, agent, backlog
+    forgeo = Forgeo(config, backlog, agent, GitManager(git_repo))
+    return forgeo, agent, backlog

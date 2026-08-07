@@ -1,8 +1,8 @@
-"""The only data contracts the factory needs.
+"""The only data contracts Forgeo needs.
 
 A task lives in the backlog, gets executed by the agent, and changes status
-exactly once per run. A factory config describes one repository and how the
-factory should work on it.
+exactly once per run. A forgeo config describes one repository and how the
+forgeo should work on it.
 """
 
 from __future__ import annotations
@@ -85,7 +85,7 @@ class RunOutcome(str, enum.Enum):
 
 
 class RunRecord(BaseModel):
-    """A durable, queryable record of one finished factory cycle.
+    """A durable, queryable record of one finished forgeo cycle.
 
     One JSON object per line in ``runs.jsonl``, next to the backlog.
     """
@@ -102,7 +102,7 @@ class RunRecord(BaseModel):
 
 
 class Task(BaseModel):
-    """A unit of work the factory executes with the coding agent."""
+    """A unit of work Forgeo executes with the coding agent."""
 
     id: str
     title: str
@@ -157,12 +157,12 @@ class RepoContext(BaseModel):
     branch: str = "main"
 
 
-class FactoryConfig(BaseModel):
-    """Everything needed to run one factory on one repository.
+class ForgeoConfig(BaseModel):
+    """Everything needed to run one forgeo on one repository.
 
     Attributes:
-        name: Display name of this factory (used in logs and commit messages).
-        repo: Path of the git repository the factory works on.
+        name: Display name of this forgeo (used in logs and commit messages).
+        repo: Path of the git repository Forgeo works on.
         interval_minutes: How often a scheduled run happens.
         backlog: Path of the JSON backlog file (created on first use).
         blocker_file: Where ``BLOCKER.md`` is written when the agent needs
@@ -171,7 +171,7 @@ class FactoryConfig(BaseModel):
         agent_command: Shell command (or argv list) that runs the coding
             agent. Exit 0 = success, ``blocked_exit_code`` = needs human
             input, anything else = error. The task is available to the
-            process as the ``FACTORY_TASK`` environment variable.
+            process as the ``FORGEO_TASK`` environment variable.
         agent_timeout_seconds: Kill the agent process after this many seconds
             (``None`` = never; a run that overruns the interval simply makes
             the next iteration skip).
@@ -191,13 +191,13 @@ class FactoryConfig(BaseModel):
         blocked_exit_code: Exit code the agent uses to signal that it needs
             human input.
         remote: Git remote to push to (e.g. ``origin``). When omitted the
-            factory only commits locally.
+            forgeo only commits locally.
         branch: Branch everything is committed to (default ``main``).
         git_timeout_seconds: Kill a git subprocess after this many seconds
             (default 120). Raise for slow remotes.
         refactor_prompt: Instruction used for the refactoring run that
             happens when the backlog has no runnable task.
-        log_file: Where the scheduled factory writes its log.
+        log_file: Where the scheduled forgeo writes its log.
         telegram_bot_token: Telegram bot token for blocked-run
             notifications. Disabled unless ``telegram_chat_id`` is also set.
         telegram_chat_id: Chat ID that receives blocked-run notifications.
@@ -221,7 +221,7 @@ class FactoryConfig(BaseModel):
     branch: str = "main"
     git_timeout_seconds: float = Field(default=120, gt=0)
     refactor_prompt: str = DEFAULT_REFACTOR_PROMPT
-    log_file: str = "factory.log"
+    log_file: str = "forgeo.log"
     telegram_bot_token: str | None = None
     telegram_chat_id: str | None = None
 
@@ -246,7 +246,7 @@ class FactoryConfig(BaseModel):
         return value
 
     @model_validator(mode="after")
-    def _docker_requires_image(self) -> FactoryConfig:
+    def _docker_requires_image(self) -> ForgeoConfig:
         if self.agent_sandbox is SandboxMode.DOCKER and not (self.agent_sandbox_image or "").strip():
             raise ValueError("agent_sandbox_image is required when agent_sandbox is 'docker'")
         return self

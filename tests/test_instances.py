@@ -1,4 +1,4 @@
-"""Tests for the instance registry (src/factory/instances.py)."""
+"""Tests for the instance registry (src/forgeo/instances.py)."""
 
 from __future__ import annotations
 
@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from factory.daemon import acquire_run_lock
-from factory.instances import (
+from forgeo.daemon import acquire_run_lock
+from forgeo.instances import (
     add_instance,
     ensure_registered,
     list_instances,
@@ -20,10 +20,10 @@ from factory.instances import (
 
 
 def write_config(tmp_path: Path, subdir: str) -> Path:
-    """A minimal valid factory.yaml in its own directory; returns its path."""
+    """A minimal valid forgeo.yaml in its own directory; returns its path."""
     config_dir = tmp_path / subdir
     config_dir.mkdir(exist_ok=True)
-    path = config_dir / "factory.yaml"
+    path = config_dir / "forgeo.yaml"
     path.write_text(
         f"name: {subdir}\n"
         "repo: .\n"
@@ -96,7 +96,7 @@ def test_add_instance_rejects_duplicates(tmp_path, monkeypatch):
 def test_add_instance_rejects_missing_config(tmp_path, monkeypatch):
     monkeypatch.setenv("FORGEO_REGISTRY", str(tmp_path / "instances.yaml"))
     with pytest.raises(FileNotFoundError):
-        add_instance("alpha", tmp_path / "missing" / "factory.yaml")
+        add_instance("alpha", tmp_path / "missing" / "forgeo.yaml")
     assert load_registry() == {}
 
 
@@ -146,7 +146,7 @@ def test_ensure_registered_skips_invalid_name(tmp_path, monkeypatch):
 def test_ensure_registered_skips_missing_config(tmp_path, monkeypatch):
     monkeypatch.setenv("FORGEO_REGISTRY", str(tmp_path / "instances.yaml"))
 
-    assert ensure_registered("alpha", tmp_path / "missing" / "factory.yaml") is False
+    assert ensure_registered("alpha", tmp_path / "missing" / "forgeo.yaml") is False
     assert load_registry() == {}
 
 
@@ -190,9 +190,9 @@ def test_remove_instance_never_touches_config(tmp_path, monkeypatch):
 
 def test_save_registry_is_atomic(tmp_path, monkeypatch):
     monkeypatch.setenv("FORGEO_REGISTRY", str(tmp_path / "instances.yaml"))
-    save_registry({"a": "/x/factory.yaml", "b": "/y/factory.yaml"})
+    save_registry({"a": "/x/forgeo.yaml", "b": "/y/forgeo.yaml"})
 
-    assert load_registry() == {"a": "/x/factory.yaml", "b": "/y/factory.yaml"}
+    assert load_registry() == {"a": "/x/forgeo.yaml", "b": "/y/forgeo.yaml"}
     leftover = [
         p.name for p in tmp_path.iterdir() if p.name != "instances.yaml"
     ]
@@ -245,7 +245,7 @@ def test_list_instances_sorted_and_tolerant(tmp_path, monkeypatch):
 
 def test_list_instances_tolerates_unloadable_config(tmp_path, monkeypatch):
     monkeypatch.setenv("FORGEO_REGISTRY", str(tmp_path / "instances.yaml"))
-    save_registry({"ghost": str(tmp_path / "gone" / "factory.yaml")})
+    save_registry({"ghost": str(tmp_path / "gone" / "forgeo.yaml")})
 
     infos = list_instances()
     assert len(infos) == 1

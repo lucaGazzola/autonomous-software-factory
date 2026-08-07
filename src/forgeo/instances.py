@@ -1,10 +1,10 @@
-"""Instance registry: a stable name for every configured factory.
+"""Instance registry: a stable name for every configured forgeo.
 
-Each factory is configured by its own ``factory.yaml`` and runs as its own
+Each forgeo is configured by its own ``forgeo.yaml`` and runs as its own
 daemon process, but nothing on the host knows how many factories exist or
-how to find their configs. The registry gives every factory a unique name
-mapped to the absolute path of its ``factory.yaml``, so the CLI can resolve
-a config by name and a single command can enumerate every factory.
+how to find their configs. The registry gives every forgeo a unique name
+mapped to the absolute path of its ``forgeo.yaml``, so the CLI can resolve
+a config by name and a single command can enumerate every forgeo.
 
 The registry is a YAML file mapping instance names to config paths. It
 lives at ``$FORGEO_REGISTRY`` or ``~/.config/forgeo/instances.yaml`` and is
@@ -16,15 +16,15 @@ from __future__ import annotations
 
 import os
 import re
-import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
 
-from factory.config import load_config
-from factory.daemon import is_lock_held
-from factory.models import FactoryConfig
+from forgeo.config import load_config
+from forgeo.daemon import is_lock_held
+from forgeo.io import atomic_write_text
+from forgeo.models import ForgeoConfig
 
 INSTANCE_NAME_RE = re.compile(r"^[a-zA-Z0-9._-]+$")
 
@@ -59,17 +59,10 @@ def load_registry() -> dict[str, str]:
 
 def save_registry(registry: dict[str, str]) -> None:
     """Persist ``registry`` atomically (temp file + rename)."""
-    path = registry_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp_name = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            yaml.safe_dump(dict(sorted(registry.items())), handle, sort_keys=False)
-        os.replace(tmp_name, path)
-    except BaseException:
-        if os.path.exists(tmp_name):
-            os.unlink(tmp_name)
-        raise
+    atomic_write_text(
+        registry_path(),
+        yaml.safe_dump(dict(sorted(registry.items())), sort_keys=False),
+    )
 
 
 def resolve_instance(name: str) -> Path | None:
@@ -148,7 +141,7 @@ class InstanceInfo:
     config_path: Path
     repo: Path | None
     daemon_running: bool
-    config: FactoryConfig | None = None
+    config: ForgeoConfig | None = None
 
 
 def _load_info(name: str, config_path: Path) -> InstanceInfo:

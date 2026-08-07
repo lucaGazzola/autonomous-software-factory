@@ -8,7 +8,7 @@ Two code paths are covered:
 
 * the **binary path** — the default when a prebuilt GitHub Release binary
   matches the host OS/arch: downloaded with curl (or wget) into
-  ``~/.local/bin/factory``, no Python required;
+  ``~/.local/bin/forgeo``, no Python required;
 * the **fallback path** — pipx then ``pip install --user``, used only when no
   prebuilt binary matches the platform (stubbed here with a foreign OS).
 """
@@ -27,7 +27,7 @@ VERSION = "0.2.1"
 SH = shutil.which("sh")
 assert SH, "sh must be available to run install.sh"
 
-FAKE_BINARY = "#!/bin/sh\nprintf 'factory-binary-stub %s\\n' \"${1:-}\"\n"
+FAKE_BINARY = "#!/bin/sh\nprintf 'forgeo-binary-stub %s\\n' \"${1:-}\"\n"
 
 PYTHON_STUB = """printf 'python3 %s\\n' "$*" >> "$STUB_LOG"
 if [ "$1" = "-c" ]; then
@@ -153,7 +153,7 @@ def _calls(tmp_path: Path) -> list[str]:
 
 
 def _installed_binary(tmp_path: Path) -> Path:
-    return tmp_path / ".local" / "bin" / "factory"
+    return tmp_path / ".local" / "bin" / "forgeo"
 
 
 # --- binary-download path ----------------------------------------------------
@@ -165,11 +165,11 @@ def test_binary_install_works_without_python(tmp_path):
     result = _run_install(tmp_path, bin_dir)
 
     assert result.returncode == 0, result.stderr
-    factory = _installed_binary(tmp_path)
-    assert factory.exists()
-    assert os.access(factory, os.X_OK)
-    assert "factory init" in result.stdout
-    assert "factory start" in result.stdout
+    forgeo = _installed_binary(tmp_path)
+    assert forgeo.exists()
+    assert os.access(forgeo, os.X_OK)
+    assert "forgeo init" in result.stdout
+    assert "forgeo start" in result.stdout
     assert "python3" not in " ".join(_calls(tmp_path))
     assert "pipx" not in " ".join(_calls(tmp_path))
 
@@ -183,7 +183,7 @@ def test_binary_download_uses_release_asset_url(tmp_path):
     curl_lines = [line for line in _calls(tmp_path) if line.startswith("curl ")]
     assert curl_lines, "curl was not invoked"
     assert any(
-        f"releases/download/v{VERSION}/factory-linux-amd64" in line for line in curl_lines
+        f"releases/download/v{VERSION}/forgeo-linux-amd64" in line for line in curl_lines
     ), curl_lines
 
 
@@ -227,7 +227,7 @@ def test_binary_download_via_wget_when_no_curl(tmp_path):
     assert result.returncode == 0, result.stderr
     assert _installed_binary(tmp_path).exists()
     wget_lines = [line for line in _calls(tmp_path) if line.startswith("wget ")]
-    assert any("factory-linux-amd64" in line for line in wget_lines)
+    assert any("forgeo-linux-amd64" in line for line in wget_lines)
 
 
 def test_darwin_arm64_maps_to_binary(tmp_path):
@@ -237,7 +237,7 @@ def test_darwin_arm64_maps_to_binary(tmp_path):
 
     assert result.returncode == 0, result.stderr
     curl_lines = [line for line in _calls(tmp_path) if line.startswith("curl ")]
-    assert any("factory-darwin-arm64" in line for line in curl_lines)
+    assert any("forgeo-darwin-arm64" in line for line in curl_lines)
 
 
 def test_no_download_tool_with_matching_platform_fails(tmp_path):
@@ -266,8 +266,8 @@ def test_pipx_fallback_when_no_binary_for_platform(tmp_path):
     assert result.returncode == 0, result.stderr
     assert f"pipx install --force {REPO_URL}" in _calls(tmp_path)
     assert not any("python3 -m pip" in line for line in _calls(tmp_path))
-    assert "factory init" in result.stdout
-    assert "factory start" in result.stdout
+    assert "forgeo init" in result.stdout
+    assert "forgeo start" in result.stdout
 
 
 def test_pipx_rerun_upgrades_instead_of_failing(tmp_path):
@@ -292,7 +292,7 @@ def test_pip_fallback_warns_when_user_bin_not_on_path(tmp_path):
     assert result.returncode == 0, result.stderr
     assert f"python3 -m pip install --user --upgrade {REPO_URL}" in _calls(tmp_path)
     assert "not on your PATH" in result.stderr
-    assert "factory init" in result.stdout
+    assert "forgeo init" in result.stdout
 
 
 def test_pip_fallback_silent_when_user_bin_on_path(tmp_path):

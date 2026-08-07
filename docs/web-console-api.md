@@ -1,28 +1,28 @@
 # Web console & HTTP API
 
-The **central dashboard** (`factory web`) is the one and only web interface
-for every factory instance. Daemons themselves bind no ports: `factory start`
+The **central dashboard** (`forgeo web`) is the one and only web interface
+for every forgeo instance. Daemons themselves bind no ports: `forgeo start`
 just schedules cycles and writes its live state to `daemon.state.json`. The
 dashboard reads every registered instance's data straight from its files
-(`backlog.json`, `runs.jsonl`, `factory.log`, `BLOCKER.md`,
+(`backlog.json`, `runs.jsonl`, `forgeo.log`, `BLOCKER.md`,
 `daemon.state.json`), so it works whether or not each instance's daemon is
 running.
 
 ```bash
-factory web               # default 0.0.0.0:8790
-factory web --port 9000   # pick a different port
-factory web --host 127.0.0.1
+forgeo web               # default 0.0.0.0:8790
+forgeo web --port 9000   # pick a different port
+forgeo web --host 127.0.0.1
 ```
 
-It runs in the foreground like `factory start`. By default it binds
+It runs in the foreground like `forgeo start`. By default it binds
 **`0.0.0.0`** so you can open it from any machine on your LAN — use
 `--host 127.0.0.1` to restrict it to the local machine (open the port in your
 firewall too).
 
 ![Forgeo web console](img/console.png)
 
-The server is implemented with the standard library (`factory.central`);
-static files in `src/factory/web/` are served at their URL paths.
+The server is implemented with the standard library (`forgeo.central`);
+static files in `src/forgeo/web/` are served at their URL paths.
 
 ## Pages
 
@@ -101,7 +101,7 @@ server generates the id as the next free `WEB-###` id and stamps
 ```bash
 curl -X POST http://127.0.0.1:8790/api/instances/my-repo/tasks \
   -H 'Content-Type: application/json' \
-  -d '{"title": "Implement fibonacci module", "description": "With tests.", "acceptance_criteria": ["passes pytest"], "agent_command": "claude -p \"$FACTORY_TASK\" --model claude-3-haiku"}'
+  -d '{"title": "Implement fibonacci module", "description": "With tests.", "acceptance_criteria": ["passes pytest"], "agent_command": "claude -p \"$FORGEO_TASK\" --model claude-3-haiku"}'
 ```
 
 ```json
@@ -201,7 +201,7 @@ curl http://127.0.0.1:8790/api/instances/my-repo/status
 
 ### `GET /api/instances/<name>/config`
 
-The resolved `factory.yaml` as JSON.
+The resolved `forgeo.yaml` as JSON.
 
 ```bash
 curl http://127.0.0.1:8790/api/instances/my-repo/config
@@ -209,7 +209,7 @@ curl http://127.0.0.1:8790/api/instances/my-repo/config
 
 ### `GET /api/instances/<name>/logs?lines=N`
 
-The last `N` lines of that instance's `factory.log` (`N` defaults to `100`,
+The last `N` lines of that instance's `forgeo.log` (`N` defaults to `100`,
 max `10000`).
 
 ```bash
@@ -266,7 +266,7 @@ curl -s http://127.0.0.1:8790/api/instances/my-repo/status
 
 ## Security notes
 
-- The dashboard binds `0.0.0.0` by default so every factory on the host is
+- The dashboard binds `0.0.0.0` by default so every forgeo on the host is
   visible from your LAN. Exposing it publicly (`--host 0.0.0.0` on a public
   interface) makes every instance's backlog, logs, and config visible to
   every host that can reach the port — only do that on a trusted network.

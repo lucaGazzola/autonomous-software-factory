@@ -1,9 +1,9 @@
 """Optional Telegram notifications for blocked runs.
 
 The feature is disabled unless both ``telegram_bot_token`` and
-``telegram_chat_id`` are set in the factory config. Uses only the standard
+``telegram_chat_id`` are set in Forgeo config. Uses only the standard
 library and never raises: a failing notification is logged as a warning and
-the outcome of the factory cycle is left unchanged.
+the outcome of Forgeo cycle is left unchanged.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 
-from factory.models import FactoryConfig
+from forgeo.models import ForgeoConfig
 
 logger = logging.getLogger(__name__)
 
@@ -31,10 +31,10 @@ class BlockedNotice:
     reason: str
 
 
-def blocked_notice_text(factory_name: str, notice: BlockedNotice) -> str:
-    """Compose the message body: factory name, task id/title, and the reason."""
+def blocked_notice_text(forgeo_name: str, notice: BlockedNotice) -> str:
+    """Compose the message body: forgeo name, task id/title, and the reason."""
     lines = [
-        f"\u26d4 {factory_name} is blocked",
+        f"\u26d4 {forgeo_name} is blocked",
         f"Task {notice.task_id}: {notice.task_title}",
         "",
         *notice.reason.splitlines()[:REASON_LINES],
@@ -42,13 +42,13 @@ def blocked_notice_text(factory_name: str, notice: BlockedNotice) -> str:
     return "\n".join(lines)
 
 
-def send_blocked_notice(config: FactoryConfig, notice: BlockedNotice) -> bool:
+def send_blocked_notice(config: ForgeoConfig, notice: BlockedNotice) -> bool:
     """Send one ``sendMessage`` request; returns True when delivered.
 
     Returns ``False`` without a warning when the feature is not configured
     (no notification is expected). Returns ``False`` and logs a warning when
     Telegram rejects or is unreachable — a notification failure never changes
-    the outcome of the factory cycle.
+    the outcome of Forgeo cycle.
     """
     if not config.telegram_bot_token or not config.telegram_chat_id:
         return False

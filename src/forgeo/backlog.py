@@ -1,6 +1,6 @@
 """The backlog: a single human-readable JSON file of tasks.
 
-The factory pulls the oldest ``OPEN`` task from here. Edit this file
+Forgeo pulls the oldest ``OPEN`` task from here. Edit this file
 directly to add, remove, or reopen tasks (e.g. set a ``BLOCKED`` task back
 to ``OPEN`` once the human input has been provided). Writes are atomic and
 serialized through an asyncio lock.
@@ -11,8 +11,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import os
-import tempfile
 from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
@@ -20,7 +18,8 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from factory.models import Task, TaskStatus
+from forgeo.io import atomic_write_text
+from forgeo.models import Task, TaskStatus
 
 logger = logging.getLogger(__name__)
 
@@ -188,19 +187,10 @@ class JSONBacklog:
 
     async def _write(self, store: dict[str, Any]) -> None:
         """Atomically persist the store (temp file + rename)."""
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        fd, tmp_name = tempfile.mkstemp(
-            dir=self.path.parent, prefix=f".{self.path.name}.", suffix=".tmp"
+        atomic_write_text(
+            self.path,
+            json.dumps(store, indent=2, ensure_ascii=False) + "\n",
         )
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as handle:
-                json.dump(store, handle, indent=2, ensure_ascii=False)
-                handle.write("\n")
-            os.replace(tmp_name, self.path)
-        except BaseException:
-            if os.path.exists(tmp_name):
-                os.unlink(tmp_name)
-            raise
 
     @staticmethod
     def _to_task(entry: dict[str, Any]) -> Task:

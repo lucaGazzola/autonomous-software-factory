@@ -1,4 +1,4 @@
-"""Helpers for the central web dashboard (:mod:`factory.central`).
+"""Helpers for the central web dashboard (:mod:`forgeo.central`).
 
 The dashboard speaks JSON and serves static files over the stdlib
 ``http.server``; these small, pure helpers keep the handler consistent

@@ -13,7 +13,7 @@
   <header class="topbar">
     <div class="brand">
       <span class="brand-dot" aria-hidden="true"></span>
-      <span class="brand-name" id="factory-name">Instance</span>
+      <span class="brand-name" id="forgeo-name">Instance</span>
     </div>
     <dl class="meta">
       <div class="meta-item">
@@ -51,7 +51,7 @@
   <main id="tab-backlog" class="tab-panel board" aria-live="polite">
     <div class="empty-state" id="empty-state" hidden>
       <p class="empty-title">No tasks</p>
-      <p class="empty-sub">The backlog is empty. The factory will run a refactoring pass until a task lands.</p>
+      <p class="empty-sub">The backlog is empty. The forgeo will run a refactoring pass until a task lands.</p>
     </div>
   </main>
   <main id="tab-create" class="tab-panel" hidden>
@@ -75,7 +75,7 @@
         </div>
         <label class="new-task__field" for="task-command">
           <span>Agent command (optional)</span>
-          <input id="task-command" name="agent_command" type="text" placeholder="e.g. claude -p &quot;$FACTORY_TASK&quot; --model claude-3-haiku" autocomplete="off">
+          <input id="task-command" name="agent_command" type="text" placeholder="e.g. claude -p &quot;$FORGEO_TASK&quot; --model claude-3-haiku" autocomplete="off">
         </label>
       </div>
       <button type="submit">Add task</button>

@@ -1,7 +1,7 @@
 # Forgeo
 
-A **scheduled, agent-driven software factory** for one repository. Every
-`interval_minutes` the factory wakes up and runs exactly one of three things:
+A **scheduled, agent-driven software forgeo** for one repository. Every
+`interval_minutes` Forgeo wakes up and runs exactly one of three things:
 
 1. picks the oldest `OPEN` task from the [backlog](backlog.md), runs it through
    a coding [agent](agent-contract.md), and commits + pushes the result
@@ -11,16 +11,16 @@ A **scheduled, agent-driven software factory** for one repository. Every
 3. if the agent signals it needs a human decision, writes a `BLOCKER.md` with
    what you must do, and pauses until you resolve it.
 
-## What the factory is
+## What Forgeo is
 
-The factory is a small Python daemon and CLI that turns your repository into a
+Forgeo is a small Python daemon and CLI that turns your repository into a
 self-maintaining codebase. You maintain a plain-JSON backlog of tasks; the
-factory works through it with whatever coding agent you configure (aider,
-Claude, a custom script — anything that reads the `FACTORY_TASK` environment
+forgeo works through it with whatever coding agent you configure (aider,
+Claude, a custom script — anything that reads the `FORGEO_TASK` environment
 variable). When there is nothing left to do, the same agent switches to
 refactoring mode and keeps the codebase tidy.
 
-The factory is deliberately single-purpose:
+Forgeo is deliberately single-purpose:
 
 - one repository per config;
 - one branch, everything committed on `main` (or whichever `branch` you set);
@@ -31,11 +31,11 @@ The factory is deliberately single-purpose:
 ## Architecture overview
 
 ```
-factory.yaml ──► factory start (daemon)
+forgeo.yaml ──► forgeo start (daemon)
                      │
                      ├── wakes every interval_minutes
                      ▼
-                 Factory.run_cycle()
+                 Forgeo.run_cycle()
                      │
                      ├── BLOCKED task exists ──► write BLOCKER.md, pause
                      │
@@ -45,7 +45,7 @@ factory.yaml ──► factory start (daemon)
                                                 │
             exit 0                              │            exit blocked_exit_code
         commit & push ──────── ShellAgent ──────┴─────► partial work committed,
-            task COMPLETED   (FACTORY_TASK env)          BLOCKER.md written,
+            task COMPLETED   (FORGEO_TASK env)          BLOCKER.md written,
                                                          task BLOCKED
 ```
 
@@ -53,31 +53,31 @@ factory.yaml ──► factory start (daemon)
 
 | Component | Source | Responsibility |
 | --- | --- | --- |
-| `factory.cli` | `src/factory/cli.py` | `init`, `start`, `once`, `status`, `stop`, `restart` commands. |
-| `factory.daemon` | `src/factory/daemon.py` | The scheduled worker: wakes every `interval_minutes`, holds the run locks, records `last_outcome`. |
-| `factory.factory` | `src/factory/factory.py` | One cycle of work: task run, refactor pass, blocker handling, git side effects. |
-| `factory.backlog` | `src/factory/backlog.py` | JSON backlog read/write; picks the oldest `OPEN` task. |
-| `factory.agent` | `src/factory/agent.py` | `ShellAgent`: runs your command, maps exit codes to outcomes, delivers `FACTORY_TASK`. |
-| `factory.git` | `src/factory/git.py` | Single-branch git operations: ensure branch, commit all, push, hard reset. |
-| `factory.config` | `src/factory/config.py` | Loads and validates `factory.yaml`. |
-| `factory.central` | `src/factory/central.py` | The `factory web` dashboard: one HTTP API + UI for every registered instance. |
-| `factory.setup` | `src/factory/setup.py` | The guided `factory init` wizard. |
-| `factory.notify` | `src/factory/notify.py` | Optional Telegram notifications for blocked runs. |
-| `factory.models` | `src/factory/models.py` | The data contracts: `Task`, `FactoryConfig`, `ExecutionResult`, statuses. |
+| `forgeo.cli` | `src/forgeo/cli.py` | `init`, `start`, `once`, `status`, `stop`, `restart` commands. |
+| `forgeo.daemon` | `src/forgeo/daemon.py` | The scheduled worker: wakes every `interval_minutes`, holds the run locks, records `last_outcome`. |
+| `forgeo.forgeo` | `src/forgeo/forgeo.py` | One cycle of work: task run, refactor pass, blocker handling, git side effects. |
+| `forgeo.backlog` | `src/forgeo/backlog.py` | JSON backlog read/write; picks the oldest `OPEN` task. |
+| `forgeo.agent` | `src/forgeo/agent.py` | `ShellAgent`: runs your command, maps exit codes to outcomes, delivers `FORGEO_TASK`. |
+| `forgeo.git` | `src/forgeo/git.py` | Single-branch git operations: ensure branch, commit all, push, hard reset. |
+| `forgeo.config` | `src/forgeo/config.py` | Loads and validates `forgeo.yaml`. |
+| `forgeo.central` | `src/forgeo/central.py` | The `forgeo web` dashboard: one HTTP API + UI for every registered instance. |
+| `forgeo.setup` | `src/forgeo/setup.py` | The guided `forgeo init` wizard. |
+| `forgeo.notify` | `src/forgeo/notify.py` | Optional Telegram notifications for blocked runs. |
+| `forgeo.models` | `src/forgeo/models.py` | The data contracts: `Task`, `ForgeoConfig`, `ExecutionResult`, statuses. |
 
 ### One cycle, in detail
 
-1. The daemon takes the per-factory lock (`backlog.lock`); a second `start` or
+1. The daemon takes the per-forgeo lock (`backlog.lock`); a second `start` or
    `once` is refused while it is held.
-2. `Factory.run_cycle()` ensures the configured branch exists and is checked
+2. `Forgeo.run_cycle()` ensures the configured branch exists and is checked
    out.
-3. If any task is `BLOCKED`, the factory rewrites `BLOCKER.md` and pauses
+3. If any task is `BLOCKED`, Forgeo rewrites `BLOCKER.md` and pauses
    (`blocked` outcome) — it will not start new work until the human resolves
    the block.
 4. Otherwise it takes the oldest `OPEN` task. If the working tree is dirty the
    cycle aborts (`dirty`) rather than running over manual changes.
 5. The agent runs with the repository as its working directory and the task in
-   `FACTORY_TASK`. The exit code decides what happens to the work — see
+   `FORGEO_TASK`. The exit code decides what happens to the work — see
    [Agent contract](agent-contract.md) for the exact mapping.
 6. With no `OPEN` task and no blocker file, the agent runs in refactoring mode
    and its changes are committed the same way.
@@ -86,13 +86,13 @@ factory.yaml ──► factory start (daemon)
 
 ## Where state lives
 
-- `factory.yaml` — the config (see [Configuration](configuration.md)).
+- `forgeo.yaml` — the config (see [Configuration](configuration.md)).
 - `backlog.json` (configurable) — the task backlog (see
   [Backlog format](backlog.md)).
 - `BLOCKER.md` (configurable) — written when a human decision is needed; keep
   it outside the repo so it is never committed.
-- `factory.log` — rotating daemon log (5 MB × 3), also served over HTTP.
-- `backlog.lock` — per-factory lock holding the daemon PID; released
+- `forgeo.log` — rotating daemon log (5 MB × 3), also served over HTTP.
+- `backlog.lock` — per-forgeo lock holding the daemon PID; released
   automatically on exit, even on a crash.
 - `backlog.run` — per-iteration lock that prevents two agents running at once.
 

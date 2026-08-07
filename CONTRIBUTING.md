@@ -1,6 +1,6 @@
 # Contributing to Forgeo
 
-Thanks for contributing! This project is an agent-driven software factory.
+Thanks for contributing! This project is an agent-driven software forgeo.
 
 ## Development setup
 
@@ -21,15 +21,15 @@ Run all three before opening a PR. CI enforces the same gates.
 ```bash
 pytest           # the test suite (tests/)
 ruff check       # linting (src, tests)
-mypy src/factory # type checking
+mypy src/forgeo # type checking
 ```
 
-The full suite should pass and `ruff check` and `mypy src/factory` should be
+The full suite should pass and `ruff check` and `mypy src/forgeo` should be
 clean.
 
 ## Writing a backlog task
 
-Backlog tasks are how the factory receives work. Tasks are JSON objects
+Backlog tasks are how Forgeo receives work. Tasks are JSON objects
 in the backlog file (see [docs/backlog.md](docs/backlog.md) for the full
 schema). A good task has three things:
 
@@ -38,7 +38,7 @@ schema). A good task has three things:
   the current behavior, the desired behavior, and where the change lives. The
   agent does not have your mental context, so spell it out.
 - **`acceptance_criteria`** — a list of concrete, verifiable outcomes. The
-  factory renders these into the agent's `FACTORY_TASK` instruction, so write
+  forgeo renders these into the agent's `FORGEO_TASK` instruction, so write
   them as checks the agent can confirm itself (e.g. "`pytest` passes", "the
   `--help` output lists `once`").
 
@@ -47,11 +47,11 @@ Example:
 ```json
 {
   "id": "TASK-002",
-  "title": "Add `factory once` command to run a single cycle",
-  "description": "The CLI only offers `factory start` (the persistent daemon). Add a `once` subcommand that runs exactly one cycle and exits.",
+  "title": "Add `forgeo once` command to run a single cycle",
+  "description": "The CLI only offers `forgeo start` (the persistent daemon). Add a `once` subcommand that runs exactly one cycle and exits.",
   "acceptance_criteria": [
-    "`factory once --config factory.yaml` runs one cycle and exits 0",
-    "`factory --help` lists `once`",
+    "`forgeo once --config forgeo.yaml` runs one cycle and exits 0",
+    "`forgeo --help` lists `once`",
     "Tests cover the new command"
   ],
   "status": "OPEN",
@@ -70,11 +70,11 @@ Human contributions use the normal GitHub flow:
 2. Make your change and commit it with a concise, descriptive message.
 3. Run the [quality gates](#quality-gates) and fix any failures.
 4. Push the branch and open a pull request against `main`.
-5. CI runs `pytest`, `ruff check`, and `mypy src/factory` on the PR — it must
+5. CI runs `pytest`, `ruff check`, and `mypy src/forgeo` on the PR — it must
    be green.
 6. Address review feedback; keep the branch rebased on `main` if it drifts.
 7. Once approved and green, merge. Follow-up work is welcome as a new PR or as
-   a backlog task for the factory.
+   a backlog task for Forgeo.
 
 ## Releasing
 
@@ -87,12 +87,12 @@ and `install.sh` downloads the matching prebuilt binary from the release
 > Patch and minor releases **must** include the built binaries, otherwise the
 > `install.sh` binary path (the default, no-Python install) breaks. The CI
 > `build-binaries` job builds them automatically on any `v*` tag, but make
-> sure the release actually carries them — the `factory-<os>-<arch>` assets
+> sure the release actually carries them — the `forgeo-<os>-<arch>` assets
 > listed below are what the installer downloads.
 
 1. Confirm the [quality gates](#quality-gates) are green on `main`.
 2. Bump the version in `pyproject.toml` (`version = "x.y.z"`) and in
-   `src/factory/__init__.py`, following
+   `src/forgeo/__init__.py`, following
    [Semantic Versioning](https://semver.org/).
 3. Update the `VERSION=` at the top of `install.sh` to the new `x.y.z` so the
    installer downloads the new release's binaries.
@@ -111,8 +111,8 @@ and `install.sh` downloads the matching prebuilt binary from the release
    ```
 
 7. Confirm the release and its artifacts (wheel, sdist, and the
-   `factory-linux-amd64`, `factory-darwin-amd64`, `factory-darwin-arm64`,
-   `factory-windows-amd64.exe` binaries) are listed under
+   `forgeo-linux-amd64`, `forgeo-darwin-amd64`, `forgeo-darwin-arm64`,
+   `forgeo-windows-amd64.exe` binaries) are listed under
    <https://github.com/lucaGazzola/forgeo/releases>.
 
 ## License

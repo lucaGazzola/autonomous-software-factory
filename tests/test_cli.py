@@ -1,4 +1,4 @@
-"""CLI tests for the ``factory once``/``status``/``stop``/``restart`` commands."""
+"""CLI tests for the ``forgeo once``/``status``/``stop``/``restart`` commands."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from factory.cli import (
+from forgeo.cli import (
     DEFAULT_CONFIG,
     backlog_status_counts,
     build_parser,
@@ -30,17 +30,17 @@ from factory.cli import (
     main,
     render_status,
 )
-from factory.daemon import acquire_run_lock, is_lock_held, read_lock_pid
-from factory.instances import list_instances, load_registry
-from factory.models import RunKind, RunOutcome, RunRecord, TaskStatus
-from factory.runs import RunRecorder, runs_path_for
-from tests.conftest import FakeFactory, git, make_config, make_task
+from forgeo.daemon import acquire_run_lock, is_lock_held, read_lock_pid
+from forgeo.instances import list_instances, load_registry
+from forgeo.models import RunKind, RunOutcome, RunRecord, TaskStatus
+from forgeo.runs import RunRecorder, runs_path_for
+from tests.conftest import FakeForgeo, git, make_config, make_task
 
 
 def write_config(git_repo: Path, tmp_path: Path, **overrides) -> Path:
     """A config file wired to the fixture repo; returns its path."""
     config = make_config(git_repo, tmp_path, **overrides)
-    path = tmp_path / "factory.yaml"
+    path = tmp_path / "forgeo.yaml"
     path.write_text(
         f"name: {config.name}\n"
         f"repo: {config.repo}\n"
@@ -56,9 +56,9 @@ def write_config(git_repo: Path, tmp_path: Path, **overrides) -> Path:
 
 
 def write_config_in(dir_path: Path, git_repo: Path, tmp_path: Path, **overrides) -> Path:
-    """A factory.yaml inside ``dir_path`` wired to ``git_repo``; returns its path."""
+    """A forgeo.yaml inside ``dir_path`` wired to ``git_repo``; returns its path."""
     config = make_config(git_repo, tmp_path, **overrides)
-    path = dir_path / "factory.yaml"
+    path = dir_path / "forgeo.yaml"
     path.write_text(
         f"name: {config.name}\n"
         f"repo: {config.repo}\n"
@@ -100,9 +100,9 @@ def wait_for(predicate: Callable[[], bool], timeout: float = 15.0) -> bool:
 
 
 def spawn_daemon(config_path: Path) -> subprocess.Popen[bytes]:
-    """Start a real ``factory start`` subprocess, detached like restart does."""
+    """Start a real ``forgeo start`` subprocess, detached like restart does."""
     return subprocess.Popen(
-        [sys.executable, "-m", "factory", "start", "--config", str(config_path)],
+        [sys.executable, "-m", "forgeo", "start", "--config", str(config_path)],
         stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
@@ -112,8 +112,8 @@ def spawn_daemon(config_path: Path) -> subprocess.Popen[bytes]:
 
 def test_once_runs_one_cycle_and_exits_zero(git_repo, tmp_path, monkeypatch, capsys):
     config_path = write_config(git_repo, tmp_path)
-    fake = FakeFactory()
-    monkeypatch.setattr("factory.cli._make_factory", lambda config: fake)
+    fake = FakeForgeo()
+    monkeypatch.setattr("forgeo.cli._make_forgeo", lambda config: fake)
 
     assert cmd_once(once_args(config_path)) == 0
     assert fake.cycles == 1
@@ -127,8 +127,8 @@ def test_once_runs_one_cycle_and_exits_zero(git_repo, tmp_path, monkeypatch, cap
 
 def test_once_refuses_while_lock_held(git_repo, tmp_path, monkeypatch, capsys):
     config_path = write_config(git_repo, tmp_path)
-    fake = FakeFactory()
-    monkeypatch.setattr("factory.cli._make_factory", lambda config: fake)
+    fake = FakeForgeo()
+    monkeypatch.setattr("forgeo.cli._make_forgeo", lambda config: fake)
     lock = acquire_run_lock(tmp_path / "backlog.lock")
     assert lock is not None
 
@@ -141,8 +141,8 @@ def test_once_refuses_while_lock_held(git_repo, tmp_path, monkeypatch, capsys):
 
 def test_once_refuses_while_daemon_lock_held(git_repo, tmp_path, monkeypatch):
     config_path = write_config(git_repo, tmp_path)
-    fake = FakeFactory()
-    monkeypatch.setattr("factory.cli._make_factory", lambda config: fake)
+    fake = FakeForgeo()
+    monkeypatch.setattr("forgeo.cli._make_forgeo", lambda config: fake)
     config = make_config(git_repo, tmp_path)
     lock = acquire_run_lock(config.backlog.with_suffix(".lock"))
     assert lock is not None
@@ -154,8 +154,8 @@ def test_once_refuses_while_daemon_lock_held(git_repo, tmp_path, monkeypatch):
 
 
 def test_once_missing_config_offers_setup(monkeypatch, tmp_path):
-    monkeypatch.setattr("factory.cli.Confirm.ask", lambda *a, **k: False)
-    args = argparse.Namespace(config=tmp_path / "factory.yaml")
+    monkeypatch.setattr("forgeo.cli.Confirm.ask", lambda *a, **k: False)
+    args = argparse.Namespace(config=tmp_path / "forgeo.yaml")
     assert cmd_once(args) == 1
 
 
@@ -201,7 +201,7 @@ def test_render_status_includes_summary_fields(git_repo, tmp_path):
         make_task(id="TASK-002", title="Done", status=TaskStatus.COMPLETED),
     ]
     text = render_status(config, tasks, daemon_running=True, last_outcome="task")
-    assert "name: test-factory" in text
+    assert "name: test-forgeo" in text
     assert f"repo: {config.repo}" in text
     assert "interval: 30 min" in text
     assert "branch: main" in text
@@ -263,7 +263,7 @@ def test_status_prints_summary_and_exits_zero(git_repo, tmp_path, capsys):
 
     assert cmd_status(status_args(config_path)) == 0
     out = capsys.readouterr().out
-    assert "name: test-factory" in out
+    assert "name: test-forgeo" in out
     assert "OPEN=1" in out
     assert "COMPLETED=1" in out
     assert "next: TASK-001 — First open" in out
@@ -332,7 +332,7 @@ def test_last_outcome_from_runs_skips_corrupt(tmp_path, caplog):
     recorder.path.write_text(
         recorder.path.read_text(encoding="utf-8") + "{not json\n", encoding="utf-8"
     )
-    with caplog.at_level(logging.WARNING, logger="factory.runs"):
+    with caplog.at_level(logging.WARNING, logger="forgeo.runs"):
         assert last_outcome_from_runs(config) == "SUCCESS"
     assert "corrupt" in caplog.text
 
@@ -366,8 +366,8 @@ def test_status_does_not_invoke_agent(git_repo, tmp_path, monkeypatch):
         called.append("agent")
         raise AssertionError("agent must not be started")
 
-    monkeypatch.setattr("factory.cli._make_factory", boom)
-    monkeypatch.setattr("factory.cli.ShellAgent", boom)
+    monkeypatch.setattr("forgeo.cli._make_forgeo", boom)
+    monkeypatch.setattr("forgeo.cli.ShellAgent", boom)
 
     assert cmd_status(status_args(config_path)) == 0
     assert called == []
@@ -398,7 +398,7 @@ def test_stop_registers_unregistered_instance(git_repo, tmp_path, monkeypatch, c
 
     assert cmd_stop(stop_args(config_path)) == 1
     assert "not running" in capsys.readouterr().out
-    assert load_registry() == {"test-factory": str(config_path.resolve())}
+    assert load_registry() == {"test-forgeo": str(config_path.resolve())}
 
 
 def test_start_registers_instance_in_registry(git_repo, tmp_path, monkeypatch, capsys):
@@ -409,7 +409,7 @@ def test_start_registers_instance_in_registry(git_repo, tmp_path, monkeypatch, c
     proc = spawn_daemon(config_path)
     try:
         assert wait_for(lambda: is_lock_held(lock_path))
-        assert load_registry() == {"test-factory": str(config_path.resolve())}
+        assert load_registry() == {"test-forgeo": str(config_path.resolve())}
         assert cmd_stop(stop_args(config_path)) == 0
         assert wait_for(lambda: proc.poll() is not None)
     finally:
@@ -430,8 +430,8 @@ def test_stop_unknown_name_does_not_register(tmp_path, monkeypatch, capsys):
 def test_once_does_not_register_instance(git_repo, tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("FORGEO_REGISTRY", str(tmp_path / "instances.yaml"))
     config_path = write_config(git_repo, tmp_path)
-    fake = FakeFactory()
-    monkeypatch.setattr("factory.cli._make_factory", lambda config: fake)
+    fake = FakeForgeo()
+    monkeypatch.setattr("forgeo.cli._make_forgeo", lambda config: fake)
 
     assert cmd_once(once_args(config_path)) == 0
     assert load_registry() == {}
@@ -519,7 +519,7 @@ def test_restart_replaces_running_daemon(git_repo, tmp_path, monkeypatch, capsys
 
 
 # --------------------------------------------------------------------------- #
-# Instance registry CLI (--name, instance add/rm/list, factory list alias)    #
+# Instance registry CLI (--name, instance add/rm/list, forgeo list alias)    #
 # --------------------------------------------------------------------------- #
 
 
@@ -532,7 +532,7 @@ def test_parser_accepts_name_for_commands(command):
 @pytest.mark.parametrize("command", ["start", "once", "status", "stop", "restart"])
 def test_parser_rejects_name_with_config(command):
     with pytest.raises(SystemExit) as excinfo:
-        build_parser().parse_args([command, "--name", "x", "--config", "factory.yaml"])
+        build_parser().parse_args([command, "--name", "x", "--config", "forgeo.yaml"])
     assert excinfo.value.code == 2
 
 
@@ -692,7 +692,7 @@ def test_status_resolves_name_from_registry(tmp_path, git_repo, monkeypatch, cap
     assert cmd_instance_add(argparse.Namespace(name="my-repo", config=config_path)) == 0
 
     assert cmd_status(argparse.Namespace(config=DEFAULT_CONFIG, name="my-repo")) == 0
-    assert "name: test-factory" in capsys.readouterr().out
+    assert "name: test-forgeo" in capsys.readouterr().out
 
 
 def test_status_unknown_name_exits_nonzero(tmp_path, monkeypatch, capsys):
@@ -705,8 +705,8 @@ def test_once_resolves_name_from_registry(tmp_path, git_repo, monkeypatch, capsy
     monkeypatch.setenv("FORGEO_REGISTRY", str(tmp_path / "instances.yaml"))
     config_path = write_config(git_repo, tmp_path)
     assert cmd_instance_add(argparse.Namespace(name="my-repo", config=config_path)) == 0
-    fake = FakeFactory()
-    monkeypatch.setattr("factory.cli._make_factory", lambda config: fake)
+    fake = FakeForgeo()
+    monkeypatch.setattr("forgeo.cli._make_forgeo", lambda config: fake)
 
     assert cmd_once(argparse.Namespace(config=DEFAULT_CONFIG, name="my-repo")) == 0
     assert fake.cycles == 1
@@ -758,8 +758,8 @@ def test_two_instances_stay_fully_independent(
     repo_b = tmp_path / "repo-b"
     repo_b.mkdir()
     git(repo_b, "init", "-b", "main")
-    git(repo_b, "config", "user.email", "factory@test.local")
-    git(repo_b, "config", "user.name", "Factory Test")
+    git(repo_b, "config", "user.email", "forgeo@test.local")
+    git(repo_b, "config", "user.name", "Forgeo Test")
     (repo_b / "app.py").write_text("def answer():\n    return 0\n", encoding="utf-8")
     git(repo_b, "add", "-A")
     git(repo_b, "commit", "-m", "initial")
@@ -888,18 +888,18 @@ def test_two_instances_stay_fully_independent(
     assert "last outcome: ERROR" in out_b
     assert "A-1" not in out_b
 
-    # Concurrent `factory status --name` subprocesses never interfere.
+    # Concurrent `forgeo status --name` subprocesses never interfere.
     env = {**os.environ, "FORGEO_REGISTRY": str(registry)}
     status_procs = [
         subprocess.Popen(
-            [sys.executable, "-m", "factory", "status", "--name", "inst-a"],
+            [sys.executable, "-m", "forgeo", "status", "--name", "inst-a"],
             env=env,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
         ),
         subprocess.Popen(
-            [sys.executable, "-m", "factory", "status", "--name", "inst-b"],
+            [sys.executable, "-m", "forgeo", "status", "--name", "inst-b"],
             env=env,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -916,17 +916,17 @@ def test_two_instances_stay_fully_independent(
     assert "inst-b" in status_outputs[1] and "B-1" in status_outputs[1]
     assert "A-1" not in status_outputs[1]
 
-    # Concurrent `factory once --name` cycles run on separate locks/repos.
+    # Concurrent `forgeo once --name` cycles run on separate locks/repos.
     cycle_procs = [
         subprocess.Popen(
-            [sys.executable, "-m", "factory", "once", "--name", "inst-a"],
+            [sys.executable, "-m", "forgeo", "once", "--name", "inst-a"],
             env=env,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
         ),
         subprocess.Popen(
-            [sys.executable, "-m", "factory", "once", "--name", "inst-b"],
+            [sys.executable, "-m", "forgeo", "once", "--name", "inst-b"],
             env=env,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -938,8 +938,8 @@ def test_two_instances_stay_fully_independent(
         assert proc.returncode == 0, f"once failed: {err}\n{out}"
 
     # Each instance's log, backlog, and runs.jsonl were updated independently.
-    log_a = (dir_a / "factory.log").read_text(encoding="utf-8")
-    log_b = (dir_b / "factory.log").read_text(encoding="utf-8")
+    log_a = (dir_a / "forgeo.log").read_text(encoding="utf-8")
+    log_b = (dir_b / "forgeo.log").read_text(encoding="utf-8")
     assert str(config_a.resolve()) in log_a
     assert str(config_b.resolve()) in log_b
     assert str(config_b.resolve()) not in log_a

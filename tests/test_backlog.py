@@ -8,8 +8,8 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from factory.backlog import JSONBacklog, oldest_open_task
-from factory.models import Task, TaskStatus
+from forgeo.backlog import JSONBacklog, oldest_open_task
+from forgeo.models import Task, TaskStatus
 from tests.conftest import make_task
 
 
@@ -207,7 +207,7 @@ async def test_missing_file_yields_empty_backlog(tmp_path):
 async def test_corrupt_file_is_preserved_and_yields_empty_backlog(tmp_path, caplog):
     path = tmp_path / "backlog.json"
     path.write_text("{not valid json", encoding="utf-8")
-    with caplog.at_level(logging.WARNING, logger="factory.backlog"):
+    with caplog.at_level(logging.WARNING, logger="forgeo.backlog"):
         assert await JSONBacklog(path).list_tasks() == []
     assert not path.exists()
     corrupt = list(tmp_path.glob("backlog.json.corrupt-*"))

@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "forgeo"
 version = "0.2.1"
-description = "A scheduled software factory: executes backlog tasks on main, refactors when idle, and writes BLOCKER.md when it needs human input."
+description = "A scheduled software forgeo: executes backlog tasks on main, refactors when idle, and writes BLOCKER.md when it needs human input."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { file = "LICENSE" }
@@ -40,10 +40,10 @@ docs = [
 ]
 
 [project.scripts]
-factory = "factory.cli:main"
+forgeo = "forgeo.cli:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/factory"]
+packages = ["src/forgeo"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -58,7 +58,7 @@ target-version = "py311"
 [tool.mypy]
 python_version = "3.11"
 mypy_path = "src"
-packages = ["factory"]
+packages = ["forgeo"]
 warn_unused_configs = true
 warn_return_any = true
 warn_redundant_casts = true

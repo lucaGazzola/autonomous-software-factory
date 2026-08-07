@@ -1,7 +1,7 @@
 """Durable run history: one JSON line per finished cycle in ``runs.jsonl``.
 
 The file lives next to the backlog (``runs.jsonl`` beside ``backlog.json``)
-so the factory, the CLI, and the web API all read the same records. Reading
+so Forgeo, the CLI, and the web API all read the same records. Reading
 tolerates a missing file and skips corrupt lines with a warning, so a broken
 ``runs.jsonl`` never breaks a cycle or the API.
 """
@@ -13,7 +13,7 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from factory.models import RunRecord
+from forgeo.models import RunRecord
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +33,7 @@ class RunRecorder:
         """Append ``record`` as one JSON line.
 
         A write failure is logged and never raised, so recording can never
-        break a factory cycle.
+        break a Forgeo cycle.
         """
         try:
             self.path.parent.mkdir(parents=True, exist_ok=True)

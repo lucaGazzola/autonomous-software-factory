@@ -2,37 +2,37 @@
 
 Commands:
 
-* ``factory`` / ``factory init`` — guided first-time setup: asks for the
-  factory folder, the coding agent command, and the refactor prompt, then
-  writes a ``factory.yaml``. Running ``factory`` or ``factory start`` without
+* ``forgeo`` / ``forgeo init`` — guided first-time setup: asks for the
+  forgeo folder, the coding agent command, and the refactor prompt, then
+  writes a ``forgeo.yaml``. Running ``forgeo`` or ``forgeo start`` without
   a config triggers it automatically.
-* ``factory start --config factory.yaml`` — run the scheduled factory on one
+* ``forgeo start --config forgeo.yaml`` — run the scheduled forgeo on one
   repository. Every ``interval_minutes`` it picks an ``OPEN`` task from the
   backlog, or runs a refactoring pass when the backlog is empty; everything
   is committed and pushed on the main branch. When the agent needs human
   input, a detailed ``BLOCKER.md`` file is written with what you must do.
   The daemon binds no ports; live state is written to ``daemon.state.json``
-  and is served to you by ``factory web``.
-* ``factory once --config factory.yaml`` — run exactly one cycle and exit.
-   Shares the per-factory lock with the daemon, so it never overlaps a
+  and is served to you by ``forgeo web``.
+* ``forgeo once --config forgeo.yaml`` — run exactly one cycle and exit.
+   Shares the per-forgeo lock with the daemon, so it never overlaps a
    running ``start``.
-* ``factory status --config factory.yaml`` — print a read-only summary of the
-   factory (config, backlog, daemon lock, last log outcome) and exit. Never
+* ``forgeo status --config forgeo.yaml`` — print a read-only summary of the
+   forgeo (config, backlog, daemon lock, last log outcome) and exit. Never
    starts an agent.
-* ``factory stop --config factory.yaml`` — stop a running daemon gracefully
+* ``forgeo stop --config forgeo.yaml`` — stop a running daemon gracefully
    (SIGTERM; a cycle in progress finishes first).
-* ``factory restart --config factory.yaml`` — stop the daemon when running,
+* ``forgeo restart --config forgeo.yaml`` — stop the daemon when running,
    then start it again detached in the background, re-reading the config.
-* ``factory instance add NAME --config PATH`` — register an existing
-   ``factory.yaml`` under a stable instance name. Optional: ``start`` and
-   ``stop`` register the factory automatically under its config's ``name``
+* ``forgeo instance add NAME --config PATH`` — register an existing
+   ``forgeo.yaml`` under a stable instance name. Optional: ``start`` and
+   ``stop`` register Forgeo automatically under its config's ``name``
    when it is not in the registry yet.
-* ``factory instance rm NAME`` — unregister an instance (never touches its
+* ``forgeo instance rm NAME`` — unregister an instance (never touches its
    config file or repository).
-* ``factory instance list`` / ``factory list`` — a table of every registered
+* ``forgeo instance list`` / ``forgeo list`` — a table of every registered
    instance: config path, repository, daemon state, last outcome, and
    backlog counts.
-* ``factory web [--host HOST] [--port PORT]`` — serve the central
+* ``forgeo web [--host HOST] [--port PORT]`` — serve the central
    multi-instance dashboard in the foreground (default ``0.0.0.0:8790``),
    aggregating every registered instance straight from its files.
 
@@ -62,15 +62,15 @@ from rich.panel import Panel
 from rich.prompt import Confirm
 from rich.table import Table
 
-from factory import __version__
-from factory.agent import DockerSandboxAgent, SandboxUnavailableError, ShellAgent
-from factory.backlog import JSONBacklog, backlog_status_counts, oldest_open_task
-from factory.central import DEFAULT_HOST, DEFAULT_PORT
-from factory.config import load_config
-from factory.daemon import FactoryDaemon, acquire_run_lock, is_lock_held, read_lock_pid
-from factory.factory import Factory
-from factory.git import GitManager
-from factory.instances import (
+from forgeo import __version__
+from forgeo.agent import DockerSandboxAgent, SandboxUnavailableError, ShellAgent
+from forgeo.backlog import JSONBacklog, backlog_status_counts, oldest_open_task
+from forgeo.central import DEFAULT_HOST, DEFAULT_PORT
+from forgeo.config import load_config
+from forgeo.daemon import ForgeoDaemon, acquire_run_lock, is_lock_held, read_lock_pid
+from forgeo.forgeo import Forgeo
+from forgeo.git import GitManager
+from forgeo.instances import (
     InstanceInfo,
     add_instance,
     ensure_registered,
@@ -78,11 +78,11 @@ from factory.instances import (
     remove_instance,
     resolve_instance,
 )
-from factory.models import FactoryConfig, SandboxMode, Task
-from factory.runs import RunRecorder, runs_path_for
-from factory.setup import run_setup
+from forgeo.models import ForgeoConfig, SandboxMode, Task
+from forgeo.runs import RunRecorder, runs_path_for
+from forgeo.setup import run_setup
 
-DEFAULT_CONFIG = Path("factory.yaml")
+DEFAULT_CONFIG = Path("forgeo.yaml")
 
 STOP_TIMEOUT_SECONDS = 600.0
 START_TIMEOUT_SECONDS = 15.0
@@ -94,27 +94,27 @@ console = Console()
 def build_parser() -> argparse.ArgumentParser:
     """Construct the CLI argument parser."""
     parser = argparse.ArgumentParser(
-        prog="factory",
-        description="A scheduled software factory: executes backlog tasks on main, "
+        prog="forgeo",
+        description="A scheduled software forgeo: executes backlog tasks on main, "
         "refactors when idle, and writes BLOCKER.md when it needs human input.",
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     sub = parser.add_subparsers(dest="action")
 
     init_parser = sub.add_parser(
-        "init", help="Guided first-time setup: interactively write a factory.yaml."
+        "init", help="Guided first-time setup: interactively write a forgeo.yaml."
     )
     init_parser.add_argument(
         "--config",
         type=Path,
         default=DEFAULT_CONFIG,
-        help="Where to write the config (default: factory.yaml).",
+        help="Where to write the config (default: forgeo.yaml).",
     )
     init_parser.add_argument(
         "--force", action="store_true", help="Overwrite an existing config file."
     )
 
-    start_parser = sub.add_parser("start", help="Start the scheduled factory for a repository.")
+    start_parser = sub.add_parser("start", help="Start the scheduled forgeo for a repository.")
     _add_config_or_name(start_parser)
     start_parser.add_argument(
         "--interval-minutes",
@@ -123,18 +123,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="Override the schedule interval from the config file.",
     )
 
-    once_parser = sub.add_parser("once", help="Run exactly one factory cycle and exit.")
+    once_parser = sub.add_parser("once", help="Run exactly one forgeo cycle and exit.")
     _add_config_or_name(once_parser)
 
     status_parser = sub.add_parser(
         "status",
-        help="Print a read-only summary of the factory (never starts an agent).",
+        help="Print a read-only summary of Forgeo (never starts an agent).",
     )
     _add_config_or_name(status_parser)
 
     stop_parser = sub.add_parser(
         "stop",
-        help="Stop a running factory daemon gracefully (SIGTERM).",
+        help="Stop a running forgeo daemon gracefully (SIGTERM).",
     )
     _add_config_or_name(stop_parser)
     stop_parser.add_argument(
@@ -147,7 +147,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     restart_parser = sub.add_parser(
         "restart",
-        help="Restart the factory daemon in the background, re-reading the config.",
+        help="Restart Forgeo daemon in the background, re-reading the config.",
     )
     _add_config_or_name(restart_parser)
     restart_parser.add_argument(
@@ -160,12 +160,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     instance_parser = sub.add_parser(
         "instance",
-        help="Register, list, and unregister named factory instances.",
+        help="Register, list, and unregister named forgeo instances.",
     )
     instance_sub = instance_parser.add_subparsers(dest="instance_action")
 
     instance_add_parser = instance_sub.add_parser(
-        "add", help="Register an existing factory.yaml under a stable name."
+        "add", help="Register an existing forgeo.yaml under a stable name."
     )
     instance_add_parser.add_argument(
         "name", help="Unique instance name (must match ^[a-zA-Z0-9._-]+$)."
@@ -174,7 +174,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--config",
         type=Path,
         required=True,
-        help="Path to the factory.yaml to register.",
+        help="Path to Forgeo.yaml to register.",
     )
 
     instance_rm_parser = instance_sub.add_parser("rm", help="Unregister an instance.")
@@ -186,7 +186,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser(
         "list",
-        help="List every registered instance (alias for `factory instance list`).",
+        help="List every registered instance (alias for `forgeo instance list`).",
     )
 
     web_parser = sub.add_parser(
@@ -212,8 +212,8 @@ def _add_config_or_name(
 ) -> None:
     """Add a mutually-exclusive ``--config``/``--name`` option pair.
 
-    ``--config`` keeps its default so plain ``factory start`` (etc.) keeps
-    resolving to ``factory.yaml``; argparse still rejects explicitly passing
+    ``--config`` keeps its default so plain ``forgeo start`` (etc.) keeps
+    resolving to ``forgeo.yaml``; argparse still rejects explicitly passing
     both options together.
     """
     group = parser.add_mutually_exclusive_group()
@@ -221,19 +221,19 @@ def _add_config_or_name(
         "--config",
         type=Path,
         default=default_config,
-        help="Factory YAML file (default: factory.yaml).",
+        help="Forgeo YAML file (default: forgeo.yaml).",
     )
     group.add_argument(
         "--name",
         default=None,
         help="Registered instance name resolved from the registry "
-        "(see `factory instance`).",
+        "(see `forgeo instance`).",
     )
 
 
 def setup_logging(log_file: str | Path) -> None:
-    """Configure the ``factory`` logger with a rotating file handler."""
-    logger = logging.getLogger("factory")
+    """Configure the ``forgeo`` logger with a rotating file handler."""
+    logger = logging.getLogger("forgeo")
     for handler in list(logger.handlers):
         logger.removeHandler(handler)
     logger.setLevel(logging.INFO)
@@ -271,21 +271,21 @@ def _resolved_config_path(args: argparse.Namespace) -> Path | None:
     if config_path is None:
         console.print(
             f"[red]Unknown instance: {name}. Register it with "
-            f"`factory instance add {name} --config PATH`.[/red]"
+            f"`forgeo instance add {name} --config PATH`.[/red]"
         )
         return None
     return config_path
 
 
 def _register_if_missing(
-    args: argparse.Namespace, config_path: Path, config: FactoryConfig
+    args: argparse.Namespace, config_path: Path, config: ForgeoConfig
 ) -> None:
-    """Auto-register the factory under ``config.name`` when not registered.
+    """Auto-register Forgeo under ``config.name`` when not registered.
 
     Only ``--config`` invocations register: with ``--name`` the instance
     must already exist (``_resolved_config_path`` errors otherwise). The
     instance name is the config's ``name`` field, so ``start``/``stop``
-    always leave the factory visible in the registry.
+    always leave Forgeo visible in the registry.
     """
     if getattr(args, "name", None) is not None:
         return
@@ -296,7 +296,7 @@ def _register_if_missing(
         )
 
 
-def _resolve_config(args: argparse.Namespace) -> FactoryConfig | None:
+def _resolve_config(args: argparse.Namespace) -> ForgeoConfig | None:
     """Load the config, offering the guided setup when missing.
 
     Resolves ``--name`` through the instance registry. Applies the optional
@@ -310,7 +310,7 @@ def _resolve_config(args: argparse.Namespace) -> FactoryConfig | None:
         console.print(f"[yellow]Config file not found: {config_path}[/yellow]")
         if not _offer_setup(config_path):
             console.print(
-                "[yellow]Create one with `factory init`, or pass --config <file>.[/yellow]"
+                "[yellow]Create one with `forgeo init`, or pass --config <file>.[/yellow]"
             )
             return None
     config = load_config(config_path)
@@ -320,18 +320,18 @@ def _resolve_config(args: argparse.Namespace) -> FactoryConfig | None:
     return config
 
 
-def _acquire_run_lock(config: FactoryConfig) -> Any | None:
-    """Take the per-factory lock; prints an error and returns None when busy."""
+def _acquire_run_lock(config: ForgeoConfig) -> Any | None:
+    """Take the per-forgeo lock; prints an error and returns None when busy."""
     lock = acquire_run_lock(config.backlog.with_suffix(".lock"))
     if lock is None:
         console.print(
-            f"[red]Another factory process (daemon or `once`) is already "
+            f"[red]Another forgeo process (daemon or `once`) is already "
             f"running for {config.name!r}.[/red]"
         )
     return lock
 
 
-def _build_agent(config: FactoryConfig) -> ShellAgent:
+def _build_agent(config: ForgeoConfig) -> ShellAgent:
     """Build the configured agent, sandboxed when ``agent_sandbox`` demands it."""
     if config.agent_sandbox is SandboxMode.DOCKER:
         return DockerSandboxAgent(
@@ -351,8 +351,8 @@ def _build_agent(config: FactoryConfig) -> ShellAgent:
     )
 
 
-def _make_factory(config: FactoryConfig) -> Factory:
-    """Build a :class:`Factory` wired to the config.
+def _make_forgeo(config: ForgeoConfig) -> Forgeo:
+    """Build a :class:`Forgeo` wired to the config.
 
     Raises:
         SandboxUnavailableError: When the configured sandbox backend is
@@ -361,7 +361,7 @@ def _make_factory(config: FactoryConfig) -> Factory:
     """
     backlog = JSONBacklog(config.backlog)
     agent = _build_agent(config)
-    return Factory(
+    return Forgeo(
         config,
         backlog,
         agent,
@@ -371,8 +371,8 @@ def _make_factory(config: FactoryConfig) -> Factory:
 
 def _prepare_worker(
     args: argparse.Namespace,
-) -> tuple[Path, FactoryConfig, Factory, Any] | None:
-    """Resolve the config, take the run lock, and build the factory.
+) -> tuple[Path, ForgeoConfig, Forgeo, Any] | None:
+    """Resolve the config, take the run lock, and build Forgeo.
 
     Shared by ``start`` and ``once``. Returns ``None`` (after printing an
     error) when any step fails; on success the caller owns the lock and must
@@ -385,31 +385,31 @@ def _prepare_worker(
     if config is None:
         return None
     setup_logging(config.log_file)
-    log = logging.getLogger("factory.cli")
-    log.info("Loading factory config from %s", config_path)
+    log = logging.getLogger("forgeo.cli")
+    log.info("Loading forgeo config from %s", config_path)
     lock = _acquire_run_lock(config)
     if lock is None:
         return None
     try:
-        factory = _make_factory(config)
+        forgeo = _make_forgeo(config)
     except SandboxUnavailableError as exc:
         lock.close()
         console.print(f"[red]{exc}[/red]")
         log.error("Sandbox unavailable: %s", exc)
         return None
-    return config_path, config, factory, lock
+    return config_path, config, forgeo, lock
 
 
 def cmd_start(args: argparse.Namespace) -> int:
-    """Handle ``factory start``: the persistent scheduled worker."""
+    """Handle ``forgeo start``: the persistent scheduled worker."""
     prepared = _prepare_worker(args)
     if prepared is None:
         return 1
-    config_path, config, factory, lock = prepared
+    config_path, config, forgeo, lock = prepared
     _register_if_missing(args, config_path, config)
 
     async def _serve() -> None:
-        daemon = FactoryDaemon(config, factory)
+        daemon = ForgeoDaemon(config, forgeo)
         loop = asyncio.get_running_loop()
         for sig in (signal.SIGINT, signal.SIGTERM):
             try:
@@ -418,7 +418,7 @@ def cmd_start(args: argparse.Namespace) -> int:
                 pass
         console.print(
             Panel.fit(
-                f"[bold]Factory:[/bold] {config.name}\n"
+                f"[bold]Forgeo:[/bold] {config.name}\n"
                 f"[bold]Repo:[/bold] {config.repo}\n"
                 f"[bold]Interval:[/bold] {config.interval_minutes} min\n"
                 f"[bold]Backlog:[/bold] {config.backlog}\n"
@@ -440,14 +440,14 @@ def cmd_start(args: argparse.Namespace) -> int:
 
 
 def cmd_once(args: argparse.Namespace) -> int:
-    """Handle ``factory once``: run exactly one cycle and exit."""
+    """Handle ``forgeo once``: run exactly one cycle and exit."""
     prepared = _prepare_worker(args)
     if prepared is None:
         return 1
-    _config_path, _config, factory, lock = prepared
+    _config_path, _config, forgeo, lock = prepared
 
     async def _run_once() -> None:
-        outcome = await factory.run_cycle()
+        outcome = await forgeo.run_cycle()
         console.print(f"[green]Cycle finished: {outcome}[/green]")
 
     try:
@@ -460,7 +460,7 @@ def cmd_once(args: argparse.Namespace) -> int:
 
 
 def cmd_init(args: argparse.Namespace) -> int:
-    """Handle ``factory init``: the guided first-time setup."""
+    """Handle ``forgeo init``: the guided first-time setup."""
     if args.config.exists() and not args.force:
         console.print(f"[red]{args.config} already exists. Pass --force to overwrite.[/red]")
         return 2
@@ -470,7 +470,7 @@ def cmd_init(args: argparse.Namespace) -> int:
     return 0
 
 
-def last_outcome_from_runs(config: FactoryConfig) -> str | None:
+def last_outcome_from_runs(config: ForgeoConfig) -> str | None:
     """Return the last run's outcome from ``runs.jsonl``, or ``None``.
 
     Never raises on a missing or corrupt file; corrupt lines are skipped
@@ -483,7 +483,7 @@ def last_outcome_from_runs(config: FactoryConfig) -> str | None:
 
 
 def render_status(
-    config: FactoryConfig,
+    config: ForgeoConfig,
     tasks: list[Task],
     *,
     daemon_running: bool,
@@ -510,7 +510,7 @@ def render_status(
     )
 
 
-def _load_config_or_error(config_path: Path) -> FactoryConfig | None:
+def _load_config_or_error(config_path: Path) -> ForgeoConfig | None:
     """Load an existing config; prints an error and returns None when missing."""
     if not config_path.exists():
         console.print(f"[red]Config file not found: {config_path}[/red]")
@@ -519,7 +519,7 @@ def _load_config_or_error(config_path: Path) -> FactoryConfig | None:
 
 
 def cmd_status(args: argparse.Namespace) -> int:
-    """Handle ``factory status``: read-only summary; never starts an agent."""
+    """Handle ``forgeo status``: read-only summary; never starts an agent."""
     config_path = _resolved_config_path(args)
     if config_path is None:
         return 1
@@ -550,43 +550,43 @@ def _wait_for_lock_release(lock_path: Path, timeout: float) -> bool:
     return not is_lock_held(lock_path)
 
 
-def _stop_daemon(config: FactoryConfig, timeout: float) -> bool:
+def _stop_daemon(config: ForgeoConfig, timeout: float) -> bool:
     """SIGTERM the running daemon and wait for it to exit; False on failure."""
     lock_path = config.backlog.with_suffix(".lock")
     pid = read_lock_pid(lock_path)
     if pid is None:
         console.print(
             f"[red]The lock file {lock_path} records no PID; find the daemon "
-            f"with `pgrep -af factory` and stop it manually.[/red]"
+            f"with `pgrep -af forgeo` and stop it manually.[/red]"
         )
         return False
-    console.print(f"Stopping factory {config.name!r} (pid {pid})…")
+    console.print(f"Stopping forgeo {config.name!r} (pid {pid})…")
     try:
         os.kill(pid, signal.SIGTERM)
     except ProcessLookupError:
         if not is_lock_held(lock_path):
-            console.print(f"[green]Factory {config.name!r} stopped.[/green]")
+            console.print(f"[green]Forgeo {config.name!r} stopped.[/green]")
             return True
         console.print(
             f"[red]Recorded pid {pid} is gone but the lock is still held; "
-            f"check with `pgrep -af factory`.[/red]"
+            f"check with `pgrep -af forgeo`.[/red]"
         )
         return False
     except PermissionError:
         console.print(f"[red]No permission to stop process {pid}.[/red]")
         return False
     if _wait_for_lock_release(lock_path, timeout):
-        console.print(f"[green]Factory {config.name!r} stopped.[/green]")
+        console.print(f"[green]Forgeo {config.name!r} stopped.[/green]")
         return True
     console.print(
-        f"[yellow]Factory is still shutting down after {timeout:.0f}s "
+        f"[yellow]Forgeo is still shutting down after {timeout:.0f}s "
         f"(a cycle in progress finishes first); giving up.[/yellow]"
     )
     return False
 
 
 def cmd_stop(args: argparse.Namespace) -> int:
-    """Handle ``factory stop``: graceful daemon shutdown via SIGTERM."""
+    """Handle ``forgeo stop``: graceful daemon shutdown via SIGTERM."""
     config_path = _resolved_config_path(args)
     if config_path is None:
         return 1
@@ -595,13 +595,13 @@ def cmd_stop(args: argparse.Namespace) -> int:
         return 1
     _register_if_missing(args, config_path, config)
     if not is_lock_held(config.backlog.with_suffix(".lock")):
-        console.print(f"[yellow]Factory {config.name!r} is not running.[/yellow]")
+        console.print(f"[yellow]Forgeo {config.name!r} is not running.[/yellow]")
         return 1
     return 0 if _stop_daemon(config, args.timeout) else 1
 
 
 def cmd_restart(args: argparse.Namespace) -> int:
-    """Handle ``factory restart``: stop when running, then start detached."""
+    """Handle ``forgeo restart``: stop when running, then start detached."""
     config_path = _resolved_config_path(args)
     if config_path is None:
         return 1
@@ -612,7 +612,7 @@ def cmd_restart(args: argparse.Namespace) -> int:
     if is_lock_held(lock_path) and not _stop_daemon(config, args.timeout):
         return 1
     proc = subprocess.Popen(
-        [sys.executable, "-m", "factory", "start", "--config", str(config_path)],
+        [sys.executable, "-m", "forgeo", "start", "--config", str(config_path)],
         stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
@@ -622,7 +622,7 @@ def cmd_restart(args: argparse.Namespace) -> int:
     while time.monotonic() < deadline:
         if is_lock_held(lock_path):
             console.print(
-                f"[green]Factory {config.name!r} restarted "
+                f"[green]Forgeo {config.name!r} restarted "
                 f"(pid {read_lock_pid(lock_path) or proc.pid}, "
                 f"interval {config.interval_minutes} min).[/green]"
             )
@@ -630,23 +630,23 @@ def cmd_restart(args: argparse.Namespace) -> int:
         if proc.poll() is not None:
             break
         time.sleep(_POLL_SECONDS)
-    console.print(f"[red]Factory daemon did not start; see {config.log_file} for details.[/red]")
+    console.print(f"[red]Forgeo daemon did not start; see {config.log_file} for details.[/red]")
     return 1
 
 
 def cmd_default() -> int:
-    """Bare ``factory``: show help when configured, run the wizard otherwise."""
+    """Bare ``forgeo``: show help when configured, run the wizard otherwise."""
     if DEFAULT_CONFIG.exists():
         build_parser().print_help()
         return 0
-    console.print("[yellow]No factory.yaml found — starting the guided setup.[/yellow]")
+    console.print("[yellow]No forgeo.yaml found — starting the guided setup.[/yellow]")
     return cmd_init(argparse.Namespace(config=DEFAULT_CONFIG, force=False))
 
 
 def cmd_instance_add(args: argparse.Namespace) -> int:
-    """Handle ``factory instance add``: register an existing factory.yaml.
+    """Handle ``forgeo instance add``: register an existing forgeo.yaml.
 
-    Normally unnecessary — ``factory start`` and ``factory stop`` register
+    Normally unnecessary — ``forgeo start`` and ``forgeo stop`` register
     the config under its ``name`` automatically — but handy to pre-register
     an explicit name or one that differs from ``config.name``.
     """
@@ -662,7 +662,7 @@ def cmd_instance_add(args: argparse.Namespace) -> int:
 
 
 def cmd_instance_rm(args: argparse.Namespace) -> int:
-    """Handle ``factory instance rm``: unregister without touching the repo."""
+    """Handle ``forgeo instance rm``: unregister without touching the repo."""
     if remove_instance(args.name):
         console.print(f"[green]Unregistered instance {args.name!r}.[/green]")
         return 0
@@ -687,12 +687,12 @@ def _instance_row(info: InstanceInfo) -> tuple[str, ...]:
 
 
 def cmd_instance_list(args: argparse.Namespace) -> int:
-    """Handle ``factory instance list`` / ``factory list``."""
+    """Handle ``forgeo instance list`` / ``forgeo list``."""
     infos = list_instances()
     if not infos:
         console.print("[yellow]No registered instances.[/yellow]")
         console.print(
-            "[yellow]Register one with `factory instance add NAME --config PATH`.[/yellow]"
+            "[yellow]Register one with `forgeo instance add NAME --config PATH`.[/yellow]"
         )
         return 0
     table = Table(title="Forgeo instances")
@@ -706,7 +706,7 @@ def cmd_instance_list(args: argparse.Namespace) -> int:
 
 
 def cmd_instance(args: argparse.Namespace) -> int:
-    """Handle ``factory instance``: the registry subcommand group."""
+    """Handle ``forgeo instance``: the registry subcommand group."""
     action = args.instance_action
     if action == "add":
         return cmd_instance_add(args)
@@ -719,12 +719,12 @@ def cmd_instance(args: argparse.Namespace) -> int:
 
 
 def cmd_web(args: argparse.Namespace) -> int:
-    """Handle ``factory web``: the central multi-instance dashboard.
+    """Handle ``forgeo web``: the central multi-instance dashboard.
 
-    Runs in the foreground like ``factory start``, serving an aggregate view
+    Runs in the foreground like ``forgeo start``, serving an aggregate view
     of every registered instance straight from each instance's files.
     """
-    from factory.central import run_foreground
+    from forgeo.central import run_foreground
 
     return run_foreground(host=args.host, port=args.port)
 
@@ -743,7 +743,7 @@ _COMMANDS: dict[str, Callable[[argparse.Namespace], int]] = {
 
 
 def main(argv: list[str] | None = None) -> int:
-    """CLI entry point used by both ``factory`` and ``python -m factory``."""
+    """CLI entry point used by both ``forgeo`` and ``python -m forgeo``."""
     parser = build_parser()
     args = parser.parse_args(argv)
     if args.action is None:

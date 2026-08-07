@@ -6,13 +6,13 @@ import asyncio
 import logging
 import os
 
-from factory.daemon import FactoryDaemon, RunLock, acquire_run_lock, is_lock_held, read_lock_pid
-from tests.conftest import FakeFactory, make_config
+from forgeo.daemon import ForgeoDaemon, RunLock, acquire_run_lock, is_lock_held, read_lock_pid
+from tests.conftest import FakeForgeo, make_config
 
 
-def make_daemon(git_repo, tmp_path, interval=1, **overrides) -> FactoryDaemon:
+def make_daemon(git_repo, tmp_path, interval=1, **overrides) -> ForgeoDaemon:
     config = make_config(git_repo, tmp_path, interval_minutes=interval, **overrides)
-    return FactoryDaemon(config, FakeFactory())
+    return ForgeoDaemon(config, FakeForgeo())
 
 
 async def test_daemon_runs_cycles_on_interval(git_repo, tmp_path):
@@ -20,12 +20,12 @@ async def test_daemon_runs_cycles_on_interval(git_repo, tmp_path):
     daemon.interval_seconds = 0.01
     task = asyncio.create_task(daemon.run_forever())
 
-    while daemon.factory.cycles == 0:
+    while daemon.forgeo.cycles == 0:
         await asyncio.sleep(0.01)
     daemon.stop()
     await asyncio.wait_for(task, timeout=5)
 
-    assert daemon.factory.cycles >= 1
+    assert daemon.forgeo.cycles >= 1
 
 
 async def test_daemon_interval_seconds(git_repo, tmp_path):
@@ -36,9 +36,9 @@ async def test_daemon_interval_seconds(git_repo, tmp_path):
 async def test_daemon_survives_crashed_cycle(git_repo, tmp_path, caplog):
     daemon = make_daemon(git_repo, tmp_path)
     daemon.interval_seconds = 0.01
-    daemon.factory.crash = True
-    daemon.factory.cycles = 0
-    with caplog.at_level(logging.ERROR, logger="factory"):
+    daemon.forgeo.crash = True
+    daemon.forgeo.cycles = 0
+    with caplog.at_level(logging.ERROR, logger="forgeo"):
         task = asyncio.create_task(daemon.run_forever())
         await asyncio.sleep(0.1)
         daemon.stop()
@@ -47,7 +47,7 @@ async def test_daemon_survives_crashed_cycle(git_repo, tmp_path, caplog):
 
 
 def test_run_lock_is_exclusive(tmp_path):
-    lock_path = tmp_path / "factory.lock"
+    lock_path = tmp_path / "forgeo.lock"
     first = acquire_run_lock(lock_path)
     assert first is not None
     assert acquire_run_lock(lock_path) is None
@@ -56,7 +56,7 @@ def test_run_lock_is_exclusive(tmp_path):
 
 
 def test_is_lock_held_detects_holder_and_stale_file(tmp_path):
-    lock_path = tmp_path / "factory.lock"
+    lock_path = tmp_path / "forgeo.lock"
     assert is_lock_held(lock_path) is False
     held = acquire_run_lock(lock_path)
     assert held is not None
@@ -66,7 +66,7 @@ def test_is_lock_held_detects_holder_and_stale_file(tmp_path):
 
 
 def test_run_lock_held_while_active(tmp_path):
-    lock_path = tmp_path / "factory.run"
+    lock_path = tmp_path / "forgeo.run"
     first = RunLock(lock_path)
     second = RunLock(lock_path)
     with first.held() as acquired:
@@ -78,7 +78,7 @@ def test_run_lock_held_while_active(tmp_path):
 
 
 def test_read_lock_pid(tmp_path):
-    lock_path = tmp_path / "factory.lock"
+    lock_path = tmp_path / "forgeo.lock"
     assert read_lock_pid(lock_path) is None
     held = acquire_run_lock(lock_path)
     try:
@@ -88,14 +88,14 @@ def test_read_lock_pid(tmp_path):
 
 
 def test_read_lock_pid_garbage(tmp_path):
-    lock_path = tmp_path / "factory.lock"
+    lock_path = tmp_path / "forgeo.lock"
     lock_path.write_text("garbage\npid=notanumber\n", encoding="utf-8")
     assert read_lock_pid(lock_path) is None
 
 
 def test_failed_acquire_keeps_holders_pid(tmp_path):
     """A second, failing acquire must not wipe the running holder's PID."""
-    lock_path = tmp_path / "factory.lock"
+    lock_path = tmp_path / "forgeo.lock"
     held = acquire_run_lock(lock_path)
     try:
         assert acquire_run_lock(lock_path) is None
@@ -113,18 +113,18 @@ async def test_daemon_skips_when_previous_run_active(git_repo, tmp_path):
         await asyncio.sleep(0.1)
         daemon.stop()
         await asyncio.wait_for(task, timeout=5)
-    assert daemon.factory.cycles == 0
+    assert daemon.forgeo.cycles == 0
 
 
 async def test_daemon_runs_after_run_lock_released(git_repo, tmp_path):
     daemon = make_daemon(git_repo, tmp_path)
     daemon.interval_seconds = 0.01
     task = asyncio.create_task(daemon.run_forever())
-    while daemon.factory.cycles == 0:
+    while daemon.forgeo.cycles == 0:
         await asyncio.sleep(0.01)
     daemon.stop()
     await asyncio.wait_for(task, timeout=5)
-    assert daemon.factory.cycles >= 1
+    assert daemon.forgeo.cycles >= 1
 
 
 def test_state_file_written_on_start(git_repo, tmp_path):
@@ -146,7 +146,7 @@ async def test_state_file_tracks_runs(git_repo, tmp_path):
     daemon = make_daemon(git_repo, tmp_path)
     daemon.interval_seconds = 0.01
     task = asyncio.create_task(daemon.run_forever())
-    while daemon.factory.cycles == 0:
+    while daemon.forgeo.cycles == 0:
         await asyncio.sleep(0.01)
     daemon.stop()
     await asyncio.wait_for(task, timeout=5)

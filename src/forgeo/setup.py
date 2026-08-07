@@ -1,16 +1,16 @@
-"""Guided first-time setup: ``factory init``.
+"""Guided first-time setup: ``forgeo init``.
 
-Walks the user through the three decisions the factory needs before it can
+Walks the user through the three decisions Forgeo needs before it can
 work on a repository:
 
-1. the factory folder — where the backlog, ``BLOCKER.md`` and the log live
+1. Forgeo folder — where the backlog, ``BLOCKER.md`` and the log live
    (inside the project, gitignored by default);
-2. the coding agent command — any shell command that reads ``$FACTORY_TASK``
-   and works in the repository (e.g. ``claude -p "$FACTORY_TASK"``);
+2. the coding agent command — any shell command that reads ``$FORGEO_TASK``
+   and works in the repository (e.g. ``claude -p "$FORGEO_TASK"``);
 3. the refactoring prompt — the default is offered; a custom one can be
    pasted instead.
 
-The result is written as ``factory.yaml`` next to the project.
+The result is written as ``forgeo.yaml`` next to the project.
 """
 
 from __future__ import annotations
@@ -24,10 +24,10 @@ from rich.markup import escape
 from rich.panel import Panel
 from rich.prompt import Confirm, Prompt
 
-from factory.models import DEFAULT_REFACTOR_PROMPT
+from forgeo.models import DEFAULT_REFACTOR_PROMPT
 
-DEFAULT_FACTORY_DIR = ".factory"
-DEFAULT_AGENT_COMMAND = 'aider --message "$FACTORY_TASK"'
+DEFAULT_FORGEO_DIR = ".forgeo"
+DEFAULT_AGENT_COMMAND = 'aider --message "$FORGEO_TASK"'
 
 SetupInput = Callable[[str], str]
 
@@ -50,18 +50,12 @@ def _ask_yes_no(input_fn: SetupInput | None, prompt: str, default: bool = True) 
 
 def _ask_multiline(input_fn: SetupInput | None, prompt: str, console: Console) -> str:
     """Multi-line answer; an empty line finishes it."""
-    if input_fn is not None:
-        lines = []
-        while True:
-            line = input_fn(prompt)
-            if not line.strip():
-                break
-            lines.append(line.strip())
-        return "\n".join(lines)
-    console.print(prompt)
+    if input_fn is None:
+        console.print(prompt)
+        prompt = "[dim](paste a line; an empty line finishes)[/dim]"
     lines = []
     while True:
-        line = Prompt.ask("[dim](paste a line; an empty line finishes)[/dim]")
+        line = input_fn(prompt) if input_fn is not None else Prompt.ask(prompt)
         if not line.strip():
             break
         lines.append(line.strip())
@@ -104,23 +98,23 @@ def run_setup(
     root = base_dir.resolve()
     if not (root / ".git").exists():
         out.print(
-            "[yellow]Warning: no .git directory here — the factory works on a git "
+            "[yellow]Warning: no .git directory here — Forgeo works on a git "
             "repository.[/yellow]"
         )
 
-    factory_dir = _ask_text(
+    forgeo_dir = _ask_text(
         input_fn,
-        f"[bold]Factory folder[/bold] for backlog, BLOCKER.md and logs "
-        f"[default {DEFAULT_FACTORY_DIR}]",
-        default=DEFAULT_FACTORY_DIR,
+        f"[bold]Forgeo folder[/bold] for backlog, BLOCKER.md and logs "
+        f"[default {DEFAULT_FORGEO_DIR}]",
+        default=DEFAULT_FORGEO_DIR,
     ).strip()
-    factory_dir = factory_dir.removeprefix("./").rstrip("/") or DEFAULT_FACTORY_DIR
-    if Path(factory_dir).is_absolute():
-        out.print("[red]The factory folder must live inside the project. Aborting.[/red]")
+    forgeo_dir = forgeo_dir.removeprefix("./").rstrip("/") or DEFAULT_FORGEO_DIR
+    if Path(forgeo_dir).is_absolute():
+        out.print("[red]Forgeo folder must live inside the project. Aborting.[/red]")
         return None
-    if ".." in Path(factory_dir).parts:
+    if ".." in Path(forgeo_dir).parts:
         out.print(
-            "[yellow]Note: the factory folder escapes the project root — the "
+            "[yellow]Note: Forgeo folder escapes the project root — the "
             "gitignore rule will not protect it.[/yellow]"
         )
 
@@ -129,9 +123,9 @@ def run_setup(
         f"[bold]Coding agent command[/bold] [default {DEFAULT_AGENT_COMMAND}]",
         default=DEFAULT_AGENT_COMMAND,
     ).strip() or DEFAULT_AGENT_COMMAND
-    if "$FACTORY_TASK" not in command:
+    if "$FORGEO_TASK" not in command:
         out.print(
-            "[yellow]Note: the command never references $FACTORY_TASK, so the "
+            "[yellow]Note: the command never references $FORGEO_TASK, so the "
             "agent will not receive the task text.[/yellow]"
         )
 
@@ -146,44 +140,44 @@ def run_setup(
 
     if _ask_yes_no(
         input_fn,
-        f"[bold]Add '{escape(factory_dir)}/' to .gitignore?[/bold]",
+        f"[bold]Add '{escape(forgeo_dir)}/' to .gitignore?[/bold]",
         default=True,
     ):
-        if add_gitignore(root, factory_dir + "/"):
-            out.print(f"[green]Added {factory_dir}/ to .gitignore.[/green]")
+        if add_gitignore(root, forgeo_dir + "/"):
+            out.print(f"[green]Added {forgeo_dir}/ to .gitignore.[/green]")
         else:
-            out.print(f"[dim]{factory_dir}/ already in .gitignore.[/dim]")
+            out.print(f"[dim]{forgeo_dir}/ already in .gitignore.[/dim]")
 
     payload = {
-        "name": root.name or "my-factory",
+        "name": root.name or "my-forgeo",
         "repo": ".",
         "interval_minutes": 60,
         "branch": "main",
-        "backlog": f"{factory_dir}/backlog.json",
-        "blocker_file": f"{factory_dir}/BLOCKER.md",
+        "backlog": f"{forgeo_dir}/backlog.json",
+        "blocker_file": f"{forgeo_dir}/BLOCKER.md",
         "agent_command": command,
         "refactor_prompt": refactor_prompt,
-        "log_file": f"{factory_dir}/factory.log",
+        "log_file": f"{forgeo_dir}/forgeo.log",
     }
 
     config_path.parent.mkdir(parents=True, exist_ok=True)
     body = yaml.safe_dump(payload, sort_keys=False, allow_unicode=True)
     config_path.write_text(
-        "# Forgeo configuration — generated by `factory init`.\n"
+        "# Forgeo configuration — generated by `forgeo init`.\n"
         "# Relative paths resolve against this file's directory.\n"
-        "# Re-run `factory init --force` to regenerate. See README.md for all keys.\n\n"
+        "# Re-run `forgeo init --force` to regenerate. See README.md for all keys.\n\n"
         + body,
         encoding="utf-8",
     )
-    (root / factory_dir).mkdir(parents=True, exist_ok=True)
+    (root / forgeo_dir).mkdir(parents=True, exist_ok=True)
 
     out.print(
         Panel.fit(
-            f"[bold]Factory configured[/bold] in {config_path}\n"
+            f"[bold]Forgeo configured[/bold] in {config_path}\n"
             f"[bold]Repo:[/bold] {root}\n"
-            f"[bold]Backlog:[/bold] {(root / factory_dir) / 'backlog.json'}\n"
+            f"[bold]Backlog:[/bold] {(root / forgeo_dir) / 'backlog.json'}\n"
             f"[bold]Agent:[/bold] {escape(command)}\n"
-            f"[bold]Next:[/bold] factory start --config {config_path.name}",
+            f"[bold]Next:[/bold] forgeo start --config {config_path.name}",
             title="Forgeo",
             border_style="green",
         )

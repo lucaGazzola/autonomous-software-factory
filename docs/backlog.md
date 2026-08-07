@@ -1,9 +1,9 @@
 # Backlog format
 
 The backlog is a **plain JSON file** you edit by hand. It lives wherever
-`backlog:` points in [factory.yaml](configuration.md) — by default
-`backlog.json` at the project root, and `.factory/backlog.json` when generated
-by `factory init`. Keep it outside the repository if you can so the agent never
+`backlog:` points in [forgeo.yaml](configuration.md) — by default
+`backlog.json` at the project root, and `.forgeo/backlog.json` when generated
+by `forgeo init`. Keep it outside the repository if you can so the agent never
 touches it.
 
 ```json
@@ -33,7 +33,7 @@ Each entry in `tasks` is a task object:
 | `created_at` | ISO-8601 datetime | now (UTC) | When the task was created; used for oldest-first ordering. |
 | `updated_at` | ISO-8601 datetime | now (UTC) | Bumped whenever the status changes. |
 | `dependencies` | list[string] | `[]` | Task ids this task depends on (informational; not enforced). |
-| `acceptance_criteria` | list[string] | `[]` | Rendered into the `FACTORY_TASK` instruction under an "Acceptance criteria:" heading. |
+| `acceptance_criteria` | list[string] | `[]` | Rendered into the `FORGEO_TASK` instruction under an "Acceptance criteria:" heading. |
 | `files_to_modify` | list[string] | `[]` | Informational; hints for the agent. |
 | `agent_command` | string / list[string] | — | Override the configured `agent_command` for this task (e.g. route it to a different model). Validated like the global key; falls back to the config default when omitted. |
 | `agent_timeout_seconds` | number | — | Override the configured `agent_timeout_seconds` for this task (must be positive). Falls back to the config default when omitted. |
@@ -43,10 +43,10 @@ every other field is optional.
 
 ### Per-task agent routing
 
-A task may override the factory's coding agent by setting `agent_command`
-(and optionally `agent_timeout_seconds`). The factory then runs that command
+A task may override Forgeo's coding agent by setting `agent_command`
+(and optionally `agent_timeout_seconds`). Forgeo then runs that command
 for that task instead of the configured default; the task still arrives as
-`FACTORY_TASK` exactly as usual. This lets you route trivial tasks to a
+`FORGEO_TASK` exactly as usual. This lets you route trivial tasks to a
 cheap/fast model and hard ones to a frontier model:
 
 ```json
@@ -55,13 +55,13 @@ cheap/fast model and hard ones to a frontier model:
     {
       "id": "TASK-001",
       "title": "Add docstrings to the public API",
-      "agent_command": "claude -p \"$FACTORY_TASK\" --model claude-3-haiku",
+      "agent_command": "claude -p \"$FORGEO_TASK\" --model claude-3-haiku",
       "agent_timeout_seconds": 120
     },
     {
       "id": "TASK-002",
       "title": "Rearchitect the cache layer",
-      "agent_command": "claude -p \"$FACTORY_TASK\" --model claude-3-opus"
+      "agent_command": "claude -p \"$FORGEO_TASK\" --model claude-3-opus"
     }
   ]
 }
@@ -71,8 +71,8 @@ cheap/fast model and hard ones to a frontier model:
 
 | Status | Meaning |
 | --- | --- |
-| `OPEN` | To be picked by the factory. |
-| `BLOCKED` | Waiting on a human decision; the factory pauses while any task is blocked. |
+| `OPEN` | To be picked by Forgeo. |
+| `BLOCKED` | Waiting on a human decision; Forgeo pauses while any task is blocked. |
 | `COMPLETED` | The agent finished and the work was committed (and pushed). |
 | `FAILED` | The agent errored; changes were discarded. |
 
@@ -81,14 +81,14 @@ You add, remove, or reopen tasks by editing the file directly — or use the
 /api/instances/<name>/tasks`) assigns the next free `WEB-###` id for you, and
 the task detail modal's **Edit** button updates an existing task's fields
 (`PATCH /api/instances/<name>/tasks/<id>`). To retry a `BLOCKED` task, set its
-status back to `OPEN` — the factory picks it up on the next scheduled run.
+status back to `OPEN` — Forgeo picks it up on the next scheduled run.
 
 ## Oldest-first ordering
 
-The factory picks the **oldest `OPEN` task**, i.e. the `OPEN` task with the
+Forgeo picks the **oldest `OPEN` task**, i.e. the `OPEN` task with the
 smallest `created_at`. Tasks in other states are ignored for picking:
 
-- `BLOCKED` tasks do not get picked, but their presence pauses the factory.
+- `BLOCKED` tasks do not get picked, but their presence pauses Forgeo.
 - `COMPLETED` and `FAILED` tasks are skipped.
 
 Set `created_at` deliberately (e.g. back-date a task) if you want to control
@@ -96,7 +96,7 @@ the order in which tasks are processed.
 
 ## How a task is executed
 
-Once picked, the task is handed to the agent as `FACTORY_TASK`, and the exit
+Once picked, the task is handed to the agent as `FORGEO_TASK`, and the exit
 code decides what happens to the work (commit & push, partial commit +
 `BLOCKER.md`, or discard). See [Agent contract](agent-contract.md) for the
 full mapping.
@@ -108,6 +108,6 @@ The backlog reader is defensive:
 - a missing file is treated as an empty backlog (and is created on first
   write);
 - a corrupt file is renamed to `backlog.json.corrupt-<timestamp>` and the
-  factory starts from an empty store — nothing is silently discarded;
+  forgeo starts from an empty store — nothing is silently discarded;
 - an unparsable task row is kept as a `FAILED` task rather than killing the
   whole store.

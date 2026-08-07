@@ -1,8 +1,8 @@
-"""Central multi-instance web dashboard (``factory web``).
+"""Central multi-instance web dashboard (``forgeo web``).
 
-A standalone server that aggregates every factory registered in the instance
-registry (:mod:`factory.instances`). It reads each instance's data straight
-from its files (``backlog.json``, ``runs.jsonl``, ``factory.log``,
+A standalone server that aggregates every forgeo registered in the instance
+registry (:mod:`forgeo.instances`). It reads each instance's data straight
+from its files (``backlog.json``, ``runs.jsonl``, ``forgeo.log``,
 ``BLOCKER.md``, ``daemon.state.json``), so it works whether or not that
 instance's daemon is running — the daemon binds no ports at all.
 
@@ -46,17 +46,17 @@ from pydantic import ValidationError
 from rich.console import Console
 from rich.panel import Panel
 
-from factory.backlog import JSONBacklog, backlog_status_counts
-from factory.daemon import read_lock_pid
-from factory.instances import (
+from forgeo.backlog import JSONBacklog, backlog_status_counts
+from forgeo.daemon import read_lock_pid
+from forgeo.instances import (
     InstanceInfo,
     get_instance,
     list_instances,
     registry_path,
 )
-from factory.models import Task, TaskStatus
-from factory.runs import RunRecorder, runs_path_for
-from factory.web_common import (
+from forgeo.models import Task, TaskStatus
+from forgeo.runs import RunRecorder, runs_path_for
+from forgeo.web_common import (
     DEFAULT_LOG_LINES,
     DEFAULT_RUN_LIMIT,
     MAX_LOG_LINES,
@@ -323,6 +323,32 @@ def make_handler() -> type[BaseHTTPRequestHandler]:
                 logger.exception("Web request failed: %s", path)
                 self._send_json(500, {"error": "internal server error"})
 
+        def _read_json_body(self) -> dict[str, Any] | None:
+            """Read and parse the request body as a JSON object.
+
+            Sends a 400 error and returns ``None`` when the body is missing,
+            malformed, or not a JSON object.
+            """
+            raw_length = self.headers.get("Content-Length")
+            if raw_length is None:
+                self._send_json(400, {"error": "request body is required"})
+                return None
+            try:
+                length = int(raw_length)
+            except ValueError:
+                self._send_json(400, {"error": "invalid Content-Length"})
+                return None
+            body = self.rfile.read(max(length, 0))
+            try:
+                payload = json.loads(body.decode("utf-8"))
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                self._send_json(400, {"error": "request body must be JSON"})
+                return None
+            if not isinstance(payload, dict):
+                self._send_json(400, {"error": "request body must be a JSON object"})
+                return None
+            return payload
+
         def _post_instance_task(self, path: str) -> None:
             """Create a task in an instance's backlog from a JSON body."""
             parts = path[len("/api/instances/") :].split("/")
@@ -338,23 +364,8 @@ def make_handler() -> type[BaseHTTPRequestHandler]:
                 self._send_json(500, {"error": "instance config not available"})
                 return
 
-            raw_length = self.headers.get("Content-Length")
-            if raw_length is None:
-                self._send_json(400, {"error": "request body is required"})
-                return
-            try:
-                length = int(raw_length)
-            except ValueError:
-                self._send_json(400, {"error": "invalid Content-Length"})
-                return
-            body = self.rfile.read(max(length, 0))
-            try:
-                payload = json.loads(body.decode("utf-8"))
-            except (json.JSONDecodeError, UnicodeDecodeError):
-                self._send_json(400, {"error": "request body must be JSON"})
-                return
-            if not isinstance(payload, dict):
-                self._send_json(400, {"error": "request body must be a JSON object"})
+            payload = self._read_json_body()
+            if payload is None:
                 return
             title = payload.get("title")
             if not isinstance(title, str) or not title.strip():
@@ -415,23 +426,8 @@ def make_handler() -> type[BaseHTTPRequestHandler]:
                 return
             task_id = unquote(parts[2])
 
-            raw_length = self.headers.get("Content-Length")
-            if raw_length is None:
-                self._send_json(400, {"error": "request body is required"})
-                return
-            try:
-                length = int(raw_length)
-            except ValueError:
-                self._send_json(400, {"error": "invalid Content-Length"})
-                return
-            body = self.rfile.read(max(length, 0))
-            try:
-                payload = json.loads(body.decode("utf-8"))
-            except (json.JSONDecodeError, UnicodeDecodeError):
-                self._send_json(400, {"error": "request body must be JSON"})
-                return
-            if not isinstance(payload, dict):
-                self._send_json(400, {"error": "request body must be a JSON object"})
+            payload = self._read_json_body()
+            if payload is None:
                 return
             if not payload:
                 self._send_json(400, {"error": "request body must not be empty"})
@@ -551,7 +547,7 @@ class CentralWebServer:
         self._httpd = httpd
         thread = threading.Thread(
             target=httpd.serve_forever,
-            name="factory-central-web",
+            name="forgeo-central-web",
             daemon=True,
         )
         self._thread = thread
@@ -606,7 +602,7 @@ async def _serve_forever(server: CentralWebServer, host: str) -> None:
 
 
 def run_foreground(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT) -> int:
-    """Start ``factory web`` in the foreground; returns the process exit code.
+    """Start ``forgeo web`` in the foreground; returns the process exit code.
 
     Binds the dashboard, prints the listening banner, and blocks until the
     user interrupts it with Ctrl-C or a SIGTERM arrives.

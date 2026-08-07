@@ -3,14 +3,14 @@
 The coding agent is **any shell command** — a CLI coding tool (aider, Claude
 Code, a custom script) or a plain command. It must be able to:
 
-1. read the task from the `FACTORY_TASK` environment variable,
+1. read the task from the `FORGEO_TASK` environment variable,
 2. work on the repository from the current working directory,
 3. report its outcome through its **exit code**.
 
 Anything a CLI agent can do works:
 
 ```yaml
-agent_command: "claude -p \"$FACTORY_TASK\""
+agent_command: "claude -p \"$FORGEO_TASK\""
 ```
 
 ## Environment
@@ -20,17 +20,17 @@ the process environment is augmented as follows:
 
 | Variable | Meaning |
 | --- | --- |
-| `FACTORY_TASK` | The full instruction for this run: title, blank line, description, and an "Acceptance criteria:" list when present. |
-| `FACTORY_REPO` | The absolute path of the repository. |
-| `FACTORY_BRANCH` | The branch everything is committed to (default `main`). |
+| `FORGEO_TASK` | The full instruction for this run: title, blank line, description, and an "Acceptance criteria:" list when present. |
+| `FORGEO_REPO` | The absolute path of the repository. |
+| `FORGEO_BRANCH` | The branch everything is committed to (default `main`). |
 | *every `agent_env` key* | Any extra variables from `agent_env` in the config. |
 | *inherited environment* | The daemon's own environment. |
 
-`FACTORY_*` variables are set unconditionally and take precedence over both the
+`FORGEO_*` variables are set unconditionally and take precedence over both the
 inherited environment and `agent_env`.
 
 For a refactoring run (empty backlog) the same contract applies: the refactor
-prompt arrives as `FACTORY_TASK` with the task id `REFACTOR` and title
+prompt arrives as `FORGEO_TASK` with the task id `REFACTOR` and title
 "Refactoring pass".
 
 ## Exit codes
@@ -39,12 +39,12 @@ The exit code decides the outcome of the run:
 
 | Exit code | Outcome | What happens |
 | --- | --- | --- |
-| `0` | **SUCCESS** | Everything is committed (`git add -A && git commit`) with the message `factory: <title> (#<id>)`, pushed when a remote is set, and the task is marked `COMPLETED`. |
-| `blocked_exit_code` (default `2`) | **BLOCKED** | The agent needs a human decision. Partial work is committed as `factory: <title> (#<id>) [partial]`, `BLOCKER.md` is written explaining what you must do, an optional Telegram notification is sent, and the task is marked `BLOCKED`. |
+| `0` | **SUCCESS** | Everything is committed (`git add -A && git commit`) with the message `forgeo: <title> (#<id>)`, pushed when a remote is set, and the task is marked `COMPLETED`. |
+| `blocked_exit_code` (default `2`) | **BLOCKED** | The agent needs a human decision. Partial work is committed as `forgeo: <title> (#<id>) [partial]`, `BLOCKER.md` is written explaining what you must do, an optional Telegram notification is sent, and the task is marked `BLOCKED`. |
 | anything else | **ERROR** | Changes are discarded (`git reset --hard` + `git clean -fd`), the failure is logged, and the task is marked `FAILED`. |
 
 The blocked exit code is configurable via `blocked_exit_code` in
-[factory.yaml](configuration.md).
+[forgeo.yaml](configuration.md).
 
 ## Timeouts
 
@@ -78,7 +78,7 @@ captured output lines are used as the "what the agent needs" section of
 
 ## Git contract
 
-The agent should **not** commit or push anything itself — the factory does
+The agent should **not** commit or push anything itself — Forgeo does
 that, based on the exit code. The working contract is:
 
 - make your changes in the repository;
@@ -95,16 +95,16 @@ A good way to keep this contract front and center is to embed it in the
 agent_command: >
   opencode run --auto "Work on the repository at the current working directory.
   Make the code changes requested below and nothing else. Do NOT run
-  git commit, git push, or git add -A — the factory commits your work.
+  git commit, git push, or git add -A — Forgeo commits your work.
   Verify with the test suite where applicable.
-  $FACTORY_TASK"
+  $FORGEO_TASK"
 ```
 
 ## Concurrency
 
-Only one agent runs at a time per factory:
+Only one agent runs at a time per forgeo:
 
-- the daemon holds a per-factory lock (`backlog.lock`) — a second `start` or
+- the daemon holds a per-forgeo lock (`backlog.lock`) — a second `start` or
   `once` is refused while it is held;
 - each cycle holds a per-iteration lock (`backlog.run`) — a wake-up that finds
   a run still in progress is skipped.

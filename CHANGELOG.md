@@ -9,15 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `factory web [--host HOST] [--port PORT]` — a standalone central dashboard
-  (default `0.0.0.0:8790`, foreground like `factory start`) that aggregates
+- `forgeo web [--host HOST] [--port PORT]` — a standalone central dashboard
+  (default `0.0.0.0:8790`, foreground like `forgeo start`) that aggregates
   every registered instance. It reads each instance's data straight from its
-  files (`backlog.json`, `runs.jsonl`, `factory.log`, `BLOCKER.md`), so it
+  files (`backlog.json`, `runs.jsonl`, `forgeo.log`, `BLOCKER.md`), so it
   works whether or not that instance's daemon is running. Home page at `/`,
   per-instance pages at `/instances/<name>/` (kanban backlog plus logs,
   runs, blocker and config tabs), and a per-instance API under
   `/api/instances/<name>/`.
-- Shared web-server helpers (`factory.web_common`) used by the central
+- Shared web-server helpers (`forgeo.web_common`) used by the central
   dashboard.
 - Task editing in the web console: the task detail modal gained an **Edit**
   mode (Save/Cancel), backed by a new `PATCH
@@ -25,16 +25,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **The embedded per-daemon web server is gone.** `factory start` no longer
+- **The embedded per-daemon web server is gone.** `forgeo start` no longer
   binds any port (`web_host`/`web_port` config keys are removed). The daemon
   instead writes its live state (pid, started at, last outcome, next run) to
   `daemon.state.json` next to the backlog after every cycle.
-- The central dashboard (`factory web`) is now the **only** web interface:
+- The central dashboard (`forgeo web`) is now the **only** web interface:
   it reads the daemon state files for accurate status, and it gained the
   instance backlog's write endpoints, `POST
   /api/instances/<name>/tasks` (with the web form on each instance page) and
   `PATCH /api/instances/<name>/tasks/<id>`, so no feature was lost.
-- `factory.web_common` docstring/API updated; `factory.server` module
+- `forgeo.web_common` docstring/API updated; `forgeo.server` module
   removed.
 
 ## [0.2.1] - 2026-08-05
@@ -63,7 +63,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Tag-triggered CI job that builds the wheel and sdist and attaches them to a
   GitHub Release.
 - Release steps documented in `CONTRIBUTING.md`.
-- Web console frontend in `src/factory/web/`: a self-contained
+- Web console frontend in `src/forgeo/web/`: a self-contained
   HTML/CSS/JS dashboard (no framework, no build step, no external assets)
   served at `/` showing the backlog grouped by status and daemon status,
   auto-refreshing every 30 seconds.
@@ -72,20 +72,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.0] - 2026-08-03
 
-Initial release of the scheduled, agent-driven software factory.
+Initial release of the scheduled, agent-driven software forgeo.
 
 ### Added
 
-- `factory start` persistent daemon: every `interval_minutes` it picks the
+- `forgeo start` persistent daemon: every `interval_minutes` it picks the
   oldest `OPEN` task, runs it through the configured agent command, and commits
   and pushes the result directly on `main`.
 - Refactoring mode: when the backlog is empty, runs the agent with the
   configured `refactor_prompt`.
 - Blocker flow: an agent exiting with `blocked_exit_code` commits partial work,
-  writes `BLOCKER.md`, and pauses the factory until the task is reopened.
-- Guided first-time setup: `factory init` wizard.
-- `factory once` command to run a single cycle and exit.
-- `factory status`, `factory stop`, and `factory restart` commands.
+  writes `BLOCKER.md`, and pauses Forgeo until the task is reopened.
+- Guided first-time setup: `forgeo init` wizard.
+- `forgeo once` command to run a single cycle and exit.
+- `forgeo status`, `forgeo stop`, and `forgeo restart` commands.
 - `--auto` flag for the agent command for unattended runs.
 - Local web dashboard and HTTP API served by the daemon.
 - Durable run history recorded to `runs.jsonl` and exposed through the API.

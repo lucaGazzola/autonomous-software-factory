@@ -5,12 +5,12 @@ __pycache__/
 .venv/
 venv/
 
-# Factory runtime artifacts
-.factory/
+# Forgeo runtime artifacts
+.forgeo/
 BLOCKER.md
-factory.log
+forgeo.log
 *.lock
-factory.yaml
+forgeo.yaml
 
 # Tooling
 .pytest_cache/

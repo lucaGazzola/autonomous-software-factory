@@ -1,8 +1,8 @@
-"""The scheduled factory daemon.
+"""The scheduled forgeo daemon.
 
-Wakes up every ``interval_minutes``, runs one cycle of the :class:`Factory`,
+Wakes up every ``interval_minutes``, runs one cycle of the :class:`Forgeo`,
 and sleeps. A lock file prevents two daemons from running on the same
-factory. A per-run lock prevents two agents from ever working on the same
+forgeo. A per-run lock prevents two agents from ever working on the same
 repository at the same time: when a run is still in progress at the next
 wake-up, that iteration is skipped instead of killing the running agent.
 Everything else is logged to the configured log file.
@@ -20,15 +20,15 @@ import asyncio
 import json
 import logging
 import os
-import tempfile
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from factory.factory import Factory
-from factory.models import FactoryConfig
+from forgeo.forgeo import Forgeo
+from forgeo.io import atomic_write_text
+from forgeo.models import ForgeoConfig
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +40,7 @@ def _take_flock(lock_path: str | Path) -> Any | None:
     process exits (even on crash). Returns ``None`` when another process
     holds the lock. Falls back to no locking when ``fcntl`` is unavailable.
     The file is opened without truncation so a failed acquire keeps the
-    running holder's recorded PID intact (``factory stop`` needs it).
+    running holder's recorded PID intact (``forgeo stop`` needs it).
     """
     lock_file = Path(lock_path)
     lock_file.parent.mkdir(parents=True, exist_ok=True)
@@ -115,7 +115,7 @@ def is_lock_held(lock_path: str | Path) -> bool:
 
 
 class RunLock:
-    """Per-iteration lock: one agent run at a time per factory.
+    """Per-iteration lock: one agent run at a time per forgeo.
 
     Held for the duration of one cycle so that a run still in progress (an
     overlong agent, an orphaned process after a daemon restart) makes the
@@ -137,12 +137,12 @@ class RunLock:
                 handle.close()
 
 
-class FactoryDaemon:
-    """Runs :class:`Factory` cycles on a fixed schedule until stopped."""
+class ForgeoDaemon:
+    """Runs :class:`Forgeo` cycles on a fixed schedule until stopped."""
 
-    def __init__(self, config: FactoryConfig, factory: Factory) -> None:
+    def __init__(self, config: ForgeoConfig, forgeo: Forgeo) -> None:
         self.config = config
-        self.factory = factory
+        self.forgeo = forgeo
         self.interval_seconds: float = config.interval_minutes * 60.0
         self.run_lock = RunLock(config.backlog.with_suffix(".run"))
         self._stop_event = asyncio.Event()
@@ -174,24 +174,12 @@ class FactoryDaemon:
             ),
         }
         path = self.state_file
-        path.parent.mkdir(parents=True, exist_ok=True)
-        fd, tmp_name = tempfile.mkstemp(
-            dir=path.parent, prefix=f".{path.name}.", suffix=".tmp"
-        )
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as handle:
-                json.dump(payload, handle, indent=2)
-                handle.write("\n")
-            os.replace(tmp_name, path)
-        except BaseException:
-            if os.path.exists(tmp_name):
-                os.unlink(tmp_name)
-            raise
+        atomic_write_text(path, json.dumps(payload, indent=2) + "\n")
 
     async def run_forever(self) -> None:
         """Wake up on the schedule interval until ``stop()`` is called."""
         logger.info(
-            "Factory %r started (repo=%s, interval=%s min, branch=%s).",
+            "Forgeo %r started (repo=%s, interval=%s min, branch=%s).",
             self.config.name,
             self.config.repo,
             self.config.interval_minutes,
@@ -205,7 +193,7 @@ class FactoryDaemon:
                         logger.info("Previous run still in progress; skipping this iteration.")
                         outcome = "skipped"
                     else:
-                        outcome = await self.factory.run_cycle()
+                        outcome = await self.forgeo.run_cycle()
                 self.last_outcome = outcome
                 logger.info("Run finished: %s", outcome)
             except Exception:
@@ -218,4 +206,4 @@ class FactoryDaemon:
             except TimeoutError:
                 pass
         self.write_state()
-        logger.info("Factory stopped.")
+        logger.info("Forgeo stopped.")

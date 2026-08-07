@@ -1,4 +1,4 @@
-"""The factory: one scheduled run of one repository.
+"""Forgeo: one scheduled run of one repository.
 
 Each run does exactly one of three things:
 
@@ -11,7 +11,7 @@ Each run does exactly one of three things:
 
 Whenever the agent signals BLOCKED, its partial work is committed and pushed
 (no branches, nothing lost) and a ``BLOCKER.md`` file is written outside the
-repository with exactly what the human needs to do. The factory stays paused
+repository with exactly what the human needs to do. Forgeo stays paused
 while that file exists.
 """
 
@@ -21,13 +21,13 @@ import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from factory.agent import BaseAgent
-from factory.backlog import JSONBacklog
-from factory.git import GitError, GitManager
-from factory.models import (
+from forgeo.agent import BaseAgent
+from forgeo.backlog import JSONBacklog
+from forgeo.git import GitError, GitManager
+from forgeo.models import (
     ExecutionResult,
     ExecutionStatus,
-    FactoryConfig,
+    ForgeoConfig,
     RepoContext,
     RunKind,
     RunOutcome,
@@ -35,8 +35,8 @@ from factory.models import (
     Task,
     TaskStatus,
 )
-from factory.notify import BlockedNotice, send_blocked_notice
-from factory.runs import RunRecorder, runs_path_for
+from forgeo.notify import BlockedNotice, send_blocked_notice
+from forgeo.runs import RunRecorder, runs_path_for
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +50,11 @@ def _execution_outcome(status: ExecutionStatus) -> RunOutcome:
     }[status]
 
 
+def _subject_label(task: Task, *, is_refactor: bool) -> str:
+    """Log subject naming the actor of a message."""
+    return "Refactoring pass" if is_refactor else f"Task {task.id}"
+
+
 @dataclass
 class BlockerEntry:
     """One blocked run to explain in the blocker file."""
@@ -60,12 +65,12 @@ class BlockerEntry:
     is_refactor: bool = False
 
 
-class Factory:
+class Forgeo:
     """Executes one scheduled run against a single repository."""
 
     def __init__(
         self,
-        config: FactoryConfig,
+        config: ForgeoConfig,
         backlog: JSONBacklog,
         agent: BaseAgent,
         git: GitManager,
@@ -130,7 +135,7 @@ class Factory:
             return "task"
 
         if self.config.blocker_file.exists():
-            logger.info("Blocker file present; factory paused until it is resolved.")
+            logger.info("Blocker file present; forgeo paused until it is resolved.")
             return "paused"
 
         await self._refactor()
@@ -211,8 +216,8 @@ class Factory:
         result, ok = await self._run_agent(
             task,
             instruction=task.instruction,
-            success_message=f"factory: {task.title} (#{task.id})",
-            blocked_message=f"factory: {task.title} (#{task.id}) [partial]",
+            success_message=f"forgeo: {task.title} (#{task.id})",
+            blocked_message=f"forgeo: {task.title} (#{task.id}) [partial]",
             command=task.agent_command,
             timeout_seconds=task.agent_timeout_seconds,
         )
@@ -297,10 +302,10 @@ class Factory:
                 )
                 await self._write_blocker([entry])
                 self._notify_blocked(entry)
-            if is_refactor:
-                logger.warning("Refactoring pass is BLOCKED; blocker file written.")
-            else:
-                logger.warning("Task %s is BLOCKED; blocker file written.", task.id)
+            logger.warning(
+                "%s is BLOCKED; blocker file written.",
+                _subject_label(task, is_refactor=is_refactor),
+            )
             return False
 
         await self._discard_failed_work(task, result, is_refactor=is_refactor)
@@ -314,18 +319,13 @@ class Factory:
         is_refactor: bool = False,
     ) -> None:
         """Hard-reset agent changes after ERROR and log the failure detail."""
+        label = _subject_label(task, is_refactor=is_refactor)
         try:
             await self.git.a_reset_hard()
         except GitError as exc:
-            if is_refactor:
-                logger.error("Could not discard refactoring changes: %s", exc)
-            else:
-                logger.error("Could not discard agent work for %s: %s", task.id, exc)
+            logger.error("Could not discard work for %s: %s", label, exc)
         detail = result.error or "no error detail provided"
-        if is_refactor:
-            logger.error("Refactoring pass FAILED: %s", detail)
-        else:
-            logger.error("Task %s FAILED: %s", task.id, detail)
+        logger.error("%s FAILED: %s", label, detail)
 
     async def _fail(self, task: Task, result: ExecutionResult) -> None:
         """Discard the agent's work, mark the task FAILED, and log the error."""
@@ -375,8 +375,8 @@ class Factory:
         await self._run_agent(
             refactor_task,
             instruction=self.config.refactor_prompt,
-            success_message="factory: refactoring pass",
-            blocked_message="factory: refactoring pass [partial]",
+            success_message="forgeo: refactoring pass",
+            blocked_message="forgeo: refactoring pass [partial]",
             is_refactor=True,
         )
 
@@ -387,7 +387,7 @@ class Factory:
     def _notify_blocked(self, entry: BlockerEntry) -> None:
         """Send a Telegram notification for a newly blocked task or refactor pass.
 
-        The message contains the factory name, the task id and title, and the
+        The message contains Forgeo name, the task id and title, and the
         first lines of the blocker reason. Notifications are optional and never
         change the outcome of the cycle: a failure is only logged.
         """
@@ -405,7 +405,7 @@ class Factory:
             "# BLOCKER: Forgeo needs your input",
             "",
             "The coding agent could not finish without a human decision. The",
-            f"factory is paused until this is resolved. Backlog: `{self.config.backlog}`.",
+            f"forgeo is paused until this is resolved. Backlog: `{self.config.backlog}`.",
             "",
         ]
         for entry in entries:
@@ -431,7 +431,7 @@ class Factory:
                 "### What you must do",
                 "",
                 "Decide how to handle this refactoring question, then delete this file.",
-                "The factory will continue on the next scheduled run.",
+                "Forgeo will continue on the next scheduled run.",
             ]
         else:
             lines += [
@@ -440,7 +440,7 @@ class Factory:
                 "",
                 "1. Decide what the agent needs (edit the repository directly if required).",
                 f"2. Open `{self.config.backlog}` and set the status of `{task.id}` back to `OPEN`",
-                "   so the factory retries it — or delete the task if it should not be done.",
-                "3. The factory will retry on the next scheduled run.",
+                "   so Forgeo retries it — or delete the task if it should not be done.",
+                "3. Forgeo will retry on the next scheduled run.",
             ]
         return "\n".join(lines)

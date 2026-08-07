@@ -1,4 +1,4 @@
-"""Git operations for the factory.
+"""Git operations for Forgeo.
 
 Everything happens on a single branch (``main`` by default): commit whatever
 the agent changed, then push. No branches, no PRs, no merge strategies.
@@ -73,7 +73,7 @@ class GitManager:
     def reset_hard(self) -> None:
         """Discard all uncommitted changes in the working tree.
 
-        Reverts tracked files and removes untracked ones (the factory only
+        Reverts tracked files and removes untracked ones (Forgeo only
         ever discards work after having verified the tree was clean, so
         everything removed here was produced by the agent).
         """

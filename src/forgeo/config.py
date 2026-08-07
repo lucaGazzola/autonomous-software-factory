@@ -1,4 +1,4 @@
-"""Project configuration loading: YAML <-> :class:`FactoryConfig`.
+"""Project configuration loading: YAML <-> :class:`ForgeoConfig`.
 
 Relative paths in the file are resolved against the file's own directory,
 so a config file can live anywhere and still point at sibling directories.
@@ -10,11 +10,11 @@ from pathlib import Path
 
 import yaml
 
-from factory.models import FactoryConfig
+from forgeo.models import ForgeoConfig
 
 
-def load_config(path: str | Path) -> FactoryConfig:
-    """Load and validate a factory YAML file.
+def load_config(path: str | Path) -> ForgeoConfig:
+    """Load and validate a Forgeo YAML file.
 
     Raises:
         FileNotFoundError: If the file does not exist.
@@ -22,7 +22,7 @@ def load_config(path: str | Path) -> FactoryConfig:
     """
     config_path = Path(path)
     payload = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
-    config = FactoryConfig.model_validate(payload)
+    config = ForgeoConfig.model_validate(payload)
     base = config_path.parent.resolve()
     updates: dict[str, Path | str] = {}
     if not config.repo.is_absolute():

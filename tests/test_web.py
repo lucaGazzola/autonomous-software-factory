@@ -1,4 +1,4 @@
-"""Tests for the central multi-instance web dashboard (``factory web``)."""
+"""Tests for the central multi-instance web dashboard (``forgeo web``)."""
 
 from __future__ import annotations
 
@@ -12,12 +12,12 @@ from pathlib import Path
 
 import pytest
 
-from factory.central import CentralWebServer, web_task_id_for
-from factory.cli import build_parser, cmd_web
-from factory.daemon import acquire_run_lock
-from factory.instances import add_instance
-from factory.models import RunKind, RunOutcome, RunRecord, TaskStatus
-from factory.runs import RunRecorder
+from forgeo.central import CentralWebServer, web_task_id_for
+from forgeo.cli import build_parser, cmd_web
+from forgeo.daemon import acquire_run_lock
+from forgeo.instances import add_instance
+from forgeo.models import RunKind, RunOutcome, RunRecord, TaskStatus
+from forgeo.runs import RunRecorder
 from tests.conftest import make_task
 
 FINISHED = datetime(2026, 8, 1, 1, 0, 10, tzinfo=UTC)
@@ -116,7 +116,7 @@ def write_instance(
     yields an instance with missing data files."""
     config_dir = tmp_path / name
     config_dir.mkdir(parents=True, exist_ok=True)
-    config_path = config_dir / "factory.yaml"
+    config_path = config_dir / "forgeo.yaml"
     backlog = config_dir / "backlog.json"
     config_path.write_text(
         f"name: {name}\n"
@@ -124,14 +124,14 @@ def write_instance(
         f"backlog: {backlog}\n"
         f"blocker_file: {config_dir / 'BLOCKER.md'}\n"
         f"agent_command: echo hi\n"
-        f"log_file: {config_dir / 'factory.log'}\n"
+        f"log_file: {config_dir / 'forgeo.log'}\n"
         f"interval_minutes: 30\n",
         encoding="utf-8",
     )
     if tasks is not None:
         backlog.write_text(json.dumps({"tasks": tasks}), encoding="utf-8")
     if log_lines:
-        (config_dir / "factory.log").write_text(
+        (config_dir / "forgeo.log").write_text(
             "\n".join(log_lines) + "\n", encoding="utf-8"
         )
     if runs:
@@ -172,7 +172,7 @@ def web_env(registry, central_server):
             task_json("TASK-002", "Done", TaskStatus.COMPLETED),
         ],
         log_lines=[
-            "2026-08-01 01:00:00 INFO     factory.daemon: Run finished: task",
+            "2026-08-01 01:00:00 INFO     forgeo.daemon: Run finished: task",
             "trailing line",
         ],
         runs=[run_record("TASK-001", RunOutcome.SUCCESS)],
@@ -395,7 +395,7 @@ def test_post_task_includes_optional_fields(web_env):
                 "title": "  Refactor the cache  ",
                 "description": "  Make it faster.  ",
                 "acceptance_criteria": ["no regressions", "tests pass"],
-                "agent_command": 'claude -p "$FACTORY_TASK" --model haiku',
+                "agent_command": 'claude -p "$FORGEO_TASK" --model haiku',
             }
         ),
     )
@@ -403,7 +403,7 @@ def test_post_task_includes_optional_fields(web_env):
     assert data["title"] == "Refactor the cache"
     assert data["description"] == "Make it faster."
     assert data["acceptance_criteria"] == ["no regressions", "tests pass"]
-    assert data["agent_command"] == 'claude -p "$FACTORY_TASK" --model haiku'
+    assert data["agent_command"] == 'claude -p "$FORGEO_TASK" --model haiku'
     assert data["created_at"]
     assert data["updated_at"]
 
@@ -485,7 +485,7 @@ def test_post_task_wrong_path_404(web_env):
 
 
 def test_post_task_id_collision_409(web_env, monkeypatch):
-    import factory.central as central_module
+    import forgeo.central as central_module
 
     server, _ = web_env
     monkeypatch.setattr(central_module, "web_task_id_for", lambda tasks: "TASK-001")
@@ -498,7 +498,7 @@ def test_post_task_id_collision_409(web_env, monkeypatch):
 
 
 def test_post_task_does_not_leak_failed_task(web_env, monkeypatch):
-    import factory.central as central_module
+    import forgeo.central as central_module
 
     server, _ = web_env
     monkeypatch.setattr(central_module, "web_task_id_for", lambda tasks: "TASK-001")

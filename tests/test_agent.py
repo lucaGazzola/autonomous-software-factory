@@ -7,8 +7,8 @@ import sys
 
 import pytest
 
-from factory.agent import DockerSandboxAgent, SandboxUnavailableError, ShellAgent
-from factory.models import ExecutionStatus, RepoContext
+from forgeo.agent import DockerSandboxAgent, SandboxUnavailableError, ShellAgent
+from forgeo.models import ExecutionStatus, RepoContext
 from tests.conftest import make_task
 
 TASK = make_task(id="TASK-001", title="Add retries", description="Implement retry logic.")
@@ -72,7 +72,7 @@ async def test_timeout_kills_whole_process_group(tmp_path):
 
     Regression: ``proc.kill()`` killed only the direct child, orphaning
     grandchildren (the real agent) that kept the output pipes open and hung
-    the factory forever.
+    the forgeo forever.
     """
     marker = tmp_path / "sleep.pid"
     agent = ShellAgent(
@@ -88,7 +88,7 @@ async def test_timeout_kills_whole_process_group(tmp_path):
 
 
 async def test_timeout_does_not_hang_when_grandchild_escapes_group():
-    """A descendant that leaves the process group must not hang the factory.
+    """A descendant that leaves the process group must not hang the forgeo.
 
     The drain is bounded, so even when an escaped grandchild (daemonized
     agent, docker container) keeps the output pipes open, the run returns.
@@ -131,7 +131,7 @@ async def test_task_instruction_via_env(tmp_path):
     repo = tmp_path / "repo"
     repo.mkdir()
     (repo / "out.txt").write_text("", encoding="utf-8")
-    agent = ShellAgent('echo "$FACTORY_TASK" > out.txt')
+    agent = ShellAgent('echo "$FORGEO_TASK" > out.txt')
     await agent.run_task(TASK, RepoContext(repo_path=repo, branch="main"))
     output = (repo / "out.txt").read_text(encoding="utf-8")
     assert "Add retries" in output
@@ -146,7 +146,7 @@ async def test_per_task_command_override(tmp_path):
     result = await agent.run_task(
         TASK,
         RepoContext(repo_path=repo, branch="main"),
-        command='echo "$FACTORY_TASK" > marker.txt',
+        command='echo "$FORGEO_TASK" > marker.txt',
     )
     assert result.status is ExecutionStatus.SUCCESS
     output = (repo / "marker.txt").read_text(encoding="utf-8")
@@ -229,7 +229,7 @@ def docker_agent(**overrides) -> DockerSandboxAgent:
 
 
 async def test_docker_missing_binary_raises(monkeypatch):
-    monkeypatch.setattr("factory.agent.shutil.which", lambda _cmd: None)
+    monkeypatch.setattr("forgeo.agent.shutil.which", lambda _cmd: None)
     with pytest.raises(SandboxUnavailableError):
         docker_agent()
 
@@ -241,7 +241,7 @@ def test_docker_rejects_blank_image():
 
 async def test_docker_runs_in_container_with_repo_mounted(monkeypatch, tmp_path):
     captured: dict = {}
-    monkeypatch.setattr("factory.agent.asyncio.create_subprocess_exec", fake_docker_exec(captured))
+    monkeypatch.setattr("forgeo.agent.asyncio.create_subprocess_exec", fake_docker_exec(captured))
     repo = tmp_path / "repo"
     repo.mkdir()
     agent = docker_agent()
@@ -264,23 +264,23 @@ async def test_docker_runs_in_container_with_repo_mounted(monkeypatch, tmp_path)
 
 async def test_docker_forwards_task_env(monkeypatch, tmp_path):
     captured: dict = {}
-    monkeypatch.setattr("factory.agent.asyncio.create_subprocess_exec", fake_docker_exec(captured))
+    monkeypatch.setattr("forgeo.agent.asyncio.create_subprocess_exec", fake_docker_exec(captured))
     repo = tmp_path / "repo"
     repo.mkdir()
     await docker_agent().run_task(TASK, RepoContext(repo_path=repo, branch="feature"))
 
     args = captured["args"]
     assert "-e" in args
-    task_env = next(a for a in args if a.startswith("FACTORY_TASK="))
+    task_env = next(a for a in args if a.startswith("FORGEO_TASK="))
     assert "Add retries" in task_env
     assert "Implement retry logic." in task_env
-    assert next(a for a in args if a.startswith("FACTORY_REPO=")) == f"FACTORY_REPO={repo}"
-    assert "FACTORY_BRANCH=feature" in args
+    assert next(a for a in args if a.startswith("FORGEO_REPO=")) == f"FORGEO_REPO={repo}"
+    assert "FORGEO_BRANCH=feature" in args
 
 
 async def test_docker_forwards_agent_env(monkeypatch):
     captured: dict = {}
-    monkeypatch.setattr("factory.agent.asyncio.create_subprocess_exec", fake_docker_exec(captured))
+    monkeypatch.setattr("forgeo.agent.asyncio.create_subprocess_exec", fake_docker_exec(captured))
     agent = docker_agent(env={"MY_TOKEN": "secret", "MODEL": "claude"})
     await agent.run_task(TASK, RepoContext())
 
@@ -291,7 +291,7 @@ async def test_docker_forwards_agent_env(monkeypatch):
 
 async def test_docker_network_configurable(monkeypatch):
     captured: dict = {}
-    monkeypatch.setattr("factory.agent.asyncio.create_subprocess_exec", fake_docker_exec(captured))
+    monkeypatch.setattr("forgeo.agent.asyncio.create_subprocess_exec", fake_docker_exec(captured))
     agent = docker_agent(network="bridge")
     await agent.run_task(TASK, RepoContext())
 
@@ -301,7 +301,7 @@ async def test_docker_network_configurable(monkeypatch):
 
 async def test_docker_mounts_are_read_only(monkeypatch, tmp_path):
     captured: dict = {}
-    monkeypatch.setattr("factory.agent.asyncio.create_subprocess_exec", fake_docker_exec(captured))
+    monkeypatch.setattr("forgeo.agent.asyncio.create_subprocess_exec", fake_docker_exec(captured))
     creds = tmp_path / "creds"
     creds.mkdir()
     agent = docker_agent(mounts=[str(creds)])
@@ -314,7 +314,7 @@ async def test_docker_mounts_are_read_only(monkeypatch, tmp_path):
 async def test_docker_preserves_blocked_exit_code(monkeypatch):
     captured: dict = {}
     monkeypatch.setattr(
-        "factory.agent.asyncio.create_subprocess_exec",
+        "forgeo.agent.asyncio.create_subprocess_exec",
         fake_docker_exec(captured, returncode=2),
     )
     result = await docker_agent().run_task(TASK, RepoContext())
@@ -325,7 +325,7 @@ async def test_docker_preserves_blocked_exit_code(monkeypatch):
 async def test_docker_preserves_other_exit_code_as_error(monkeypatch):
     captured: dict = {}
     monkeypatch.setattr(
-        "factory.agent.asyncio.create_subprocess_exec",
+        "forgeo.agent.asyncio.create_subprocess_exec",
         fake_docker_exec(captured, returncode=1),
     )
     result = await docker_agent().run_task(TASK, RepoContext())
@@ -335,7 +335,7 @@ async def test_docker_preserves_other_exit_code_as_error(monkeypatch):
 
 async def test_docker_accepts_argv_list_command(monkeypatch):
     captured: dict = {}
-    monkeypatch.setattr("factory.agent.asyncio.create_subprocess_exec", fake_docker_exec(captured))
+    monkeypatch.setattr("forgeo.agent.asyncio.create_subprocess_exec", fake_docker_exec(captured))
     agent = docker_agent(command=["opencode", "run"])
     await agent.run_task(TASK, RepoContext())
 

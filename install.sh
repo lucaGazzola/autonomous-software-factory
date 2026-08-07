@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Install the `factory` CLI from the public GitHub remote.
+# Install the `forgeo` CLI from the public GitHub remote.
 #
 #   curl -fsSL https://forgeo.org/install.sh | bash
 #
@@ -80,7 +80,7 @@ warn_path_not_on_path() {
         *":$1:"*)
             ;;
         *)
-            warn "warning: $1 is not on your PATH, so the 'factory' command will not be found."
+            warn "warning: $1 is not on your PATH, so the 'forgeo' command will not be found."
             warn "Add it to your PATH (e.g. 'export PATH=\"\$PATH:$1\"' in ~/.profile) and open a new shell."
             ;;
     esac
@@ -92,18 +92,18 @@ install_binary() {
     case "$os_arch" in
         windows-*) suffix=".exe" ;;
     esac
-    url="$BASE_URL/factory-$os_arch$suffix"
+    url="$BASE_URL/forgeo-$os_arch$suffix"
     mkdir -p "$BIN_DIR"
-    tmp="$BIN_DIR/.factory-$os_arch-$$"
+    tmp="$BIN_DIR/.forgeo-$os_arch-$$"
     trap 'rm -f "$tmp"' EXIT HUP INT TERM
-    log "Downloading factory v$VERSION ($os_arch)..."
+    log "Downloading forgeo v$VERSION ($os_arch)..."
     if ! download "$url" "$tmp"; then
         die "could not download $url. Check your network connection, or that release v$VERSION is published with prebuilt binaries."
     fi
     chmod 755 "$tmp" 2>/dev/null || true
-    mv -f "$tmp" "$BIN_DIR/factory"
+    mv -f "$tmp" "$BIN_DIR/forgeo"
     trap - EXIT HUP INT TERM
-    log "Installed 'factory' to $BIN_DIR/factory."
+    log "Installed 'forgeo' to $BIN_DIR/forgeo."
     warn_path_not_on_path "$BIN_DIR"
 }
 
@@ -115,7 +115,7 @@ install_from_source() {
     log "Using $PYTHON."
 
     if command -v pipx >/dev/null 2>&1; then
-        log "Installing factory with pipx..."
+        log "Installing forgeo with pipx..."
         pipx install --force "$REPO_URL"
     else
         warn "pipx not found; falling back to 'pip install --user'."
@@ -134,6 +134,6 @@ else
 fi
 
 log ""
-log "Done. The 'factory' CLI is installed. Next steps:"
-log "  factory init"
-log "  factory start"
+log "Done. The 'forgeo' CLI is installed. Next steps:"
+log "  forgeo init"
+log "  forgeo start"
