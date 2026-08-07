@@ -31,8 +31,10 @@ def test_oldest_open_task_none_when_empty_or_no_open():
 
 async def test_fetch_oldest_open_task(tmp_path):
     backlog = JSONBacklog(tmp_path / "backlog.json")
-    older = Task(id="A", title="older", created_at=datetime.now(UTC) - timedelta(hours=2))
-    newer = Task(id="B", title="newer", created_at=datetime.now(UTC))
+    older = Task(
+        id="A", title="older", description="d", created_at=datetime.now(UTC) - timedelta(hours=2)
+    )
+    newer = Task(id="B", title="newer", description="d", created_at=datetime.now(UTC))
     await backlog.create_task(newer)
     await backlog.create_task(older)
 
@@ -43,13 +45,15 @@ async def test_fetch_oldest_open_task(tmp_path):
 async def test_fetch_skips_non_open_tasks(tmp_path):
     backlog = JSONBacklog(tmp_path / "backlog.json")
     for status in (TaskStatus.BLOCKED, TaskStatus.COMPLETED, TaskStatus.FAILED):
-        await backlog.create_task(Task(id=status.value, title="t", status=status))
+        await backlog.create_task(Task(id=status.value, title="t", description="d", status=status))
     assert await backlog.fetch_next_task() is None
 
 
 async def test_fetch_prefers_open_over_blocked(tmp_path):
     backlog = JSONBacklog(tmp_path / "backlog.json")
-    await backlog.create_task(Task(id="BLOCKED-1", title="b", status=TaskStatus.BLOCKED))
+    await backlog.create_task(
+        Task(id="BLOCKED-1", title="b", description="d", status=TaskStatus.BLOCKED)
+    )
     await backlog.create_task(make_task(id="OPEN-1"))
     fetched = await backlog.fetch_next_task()
     assert fetched.id == "OPEN-1"
@@ -166,6 +170,8 @@ async def test_update_task_invalid_values_raise(tmp_path):
         {"title": ""},
         {"title": "   "},
         {"title": 42},
+        {"description": ""},
+        {"description": "   "},
         {"description": ["not", "a", "string"]},
         {"acceptance_criteria": "nope"},
         {"acceptance_criteria": [1, 2]},

@@ -106,7 +106,7 @@ class Task(BaseModel):
 
     id: str
     title: str
-    description: str = ""
+    description: str
     dependencies: list[str] = Field(default_factory=list)
     acceptance_criteria: list[str] = Field(default_factory=list)
     files_to_modify: list[str] = Field(default_factory=list)
@@ -126,6 +126,13 @@ class Task(BaseModel):
             lines.append("Acceptance criteria:")
             lines.extend(f"- {criterion}" for criterion in self.acceptance_criteria)
         return "\n".join(lines)
+
+    @field_validator("description")
+    @classmethod
+    def _description_not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("description must be a non-blank string")
+        return value
 
     @field_validator("agent_command")
     @classmethod

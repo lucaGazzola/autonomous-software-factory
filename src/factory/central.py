@@ -361,8 +361,8 @@ def make_handler() -> type[BaseHTTPRequestHandler]:
                 self._send_json(400, {"error": "title is required"})
                 return
             description = payload.get("description", "")
-            if not isinstance(description, str):
-                self._send_json(400, {"error": "description must be a string"})
+            if not isinstance(description, str) or not description.strip():
+                self._send_json(400, {"error": "description is required"})
                 return
             acceptance_criteria = payload.get("acceptance_criteria", [])
             if not isinstance(acceptance_criteria, list) or not all(
@@ -372,14 +372,23 @@ def make_handler() -> type[BaseHTTPRequestHandler]:
                     400, {"error": "acceptance_criteria must be a list of strings"}
                 )
                 return
+            agent_command = payload.get("agent_command")
+            if agent_command is not None and (
+                not isinstance(agent_command, str) or not agent_command.strip()
+            ):
+                self._send_json(
+                    400, {"error": "agent_command must be a non-blank string or null"}
+                )
+                return
 
             backlog = JSONBacklog(info.config.backlog)
             existing = asyncio.run(backlog.list_tasks())
             task = Task(
                 id=web_task_id_for(existing),
                 title=title.strip(),
-                description=description,
+                description=description.strip(),
                 acceptance_criteria=acceptance_criteria,
+                agent_command=agent_command.strip() if agent_command else None,
             )
             try:
                 created = asyncio.run(backlog.create_task(task))

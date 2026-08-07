@@ -231,12 +231,14 @@ def test_status_prints_summary_and_exits_zero(git_repo, tmp_path, capsys):
                     {
                         "id": "TASK-001",
                         "title": "First open",
+                        "description": "Do the thing.",
                         "status": "OPEN",
                         "created_at": "2026-01-01T00:00:00Z",
                     },
                     {
                         "id": "TASK-002",
                         "title": "Done already",
+                        "description": "Do the thing.",
                         "status": "COMPLETED",
                         "created_at": "2026-01-02T00:00:00Z",
                     },
@@ -626,6 +628,7 @@ def test_instance_list_table_shows_state(tmp_path, git_repo, monkeypatch, capsys
                     {
                         "id": "TASK-001",
                         "title": "Do it",
+                        "description": "Do the thing.",
                         "status": "OPEN",
                         "created_at": "2026-01-01T00:00:00Z",
                     }
@@ -820,6 +823,7 @@ def test_two_instances_stay_fully_independent(
                     {
                         "id": "A-1",
                         "title": "Alpha task",
+                        "description": "Do the thing.",
                         "status": "OPEN",
                         "created_at": "2026-01-01T00:00:00Z",
                     }
@@ -835,6 +839,7 @@ def test_two_instances_stay_fully_independent(
                     {
                         "id": "B-1",
                         "title": "Beta task",
+                        "description": "Do the thing.",
                         "status": "OPEN",
                         "created_at": "2026-01-01T00:00:00Z",
                     }

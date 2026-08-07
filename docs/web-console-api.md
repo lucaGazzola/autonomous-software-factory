@@ -92,14 +92,16 @@ Returns `404` with `{"error": "not found"}` for an unknown id.
 ### `POST /api/instances/<name>/tasks`
 
 Create a new task in that instance's backlog. The request body must be a JSON
-object with a non-blank `title`; `description` (string) and
-`acceptance_criteria` (array of strings) are optional. The server generates
-the id as the next free `WEB-###` id and stamps `created_at`/`updated_at`.
+object with a non-blank `title` and a non-blank `description`;
+`acceptance_criteria` (array of strings) and `agent_command` (string or
+`null`, overriding the configured agent for this task) are optional. The
+server generates the id as the next free `WEB-###` id and stamps
+`created_at`/`updated_at`.
 
 ```bash
 curl -X POST http://127.0.0.1:8790/api/instances/my-repo/tasks \
   -H 'Content-Type: application/json' \
-  -d '{"title": "Implement fibonacci module", "description": "With tests.", "acceptance_criteria": ["passes pytest"]}'
+  -d '{"title": "Implement fibonacci module", "description": "With tests.", "acceptance_criteria": ["passes pytest"], "agent_command": "claude -p \"$FACTORY_TASK\" --model claude-3-haiku"}'
 ```
 
 ```json
@@ -120,8 +122,9 @@ Returns `201` with the created task. The write is atomic (temp file +
 rename), so it is safe even while that instance's daemon is mid-cycle.
 Errors:
 
-- `400` with `{"error": "..."}` — missing/blank `title`, unparseable or
-  non-object body, or a field of the wrong type.
+- `400` with `{"error": "..."}` — missing/blank `title`, missing/blank
+  `description`, unparseable or non-object body, or a field of the wrong
+  type.
 - `404` with `{"error": "unknown instance"}` — the instance is not
   registered.
 - `409` with `{"error": "..."}` — the generated id already exists in the

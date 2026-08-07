@@ -356,12 +356,14 @@ def test_tasks_endpoints(web_env):
 def test_post_task_creates_in_backlog(web_env):
     server, _ = web_env
     base = f"http://127.0.0.1:{server.port}/api/instances/alpha/tasks"
-    status, data = _post(base, json.dumps({"title": "Build a thing"}))
+    status, data = _post(
+        base, json.dumps({"title": "Build a thing", "description": "Do it."})
+    )
     assert status == 201
     assert isinstance(data, dict)
     assert data["id"] == "WEB-001"
     assert data["title"] == "Build a thing"
-    assert data["description"] == ""
+    assert data["description"] == "Do it."
     assert data["acceptance_criteria"] == []
     assert data["status"] == "OPEN"
 
@@ -377,8 +379,8 @@ def test_post_task_creates_in_backlog(web_env):
 def test_post_task_increments_web_ids(web_env):
     server, _ = web_env
     base = f"http://127.0.0.1:{server.port}/api/instances/alpha/tasks"
-    _, first = _post(base, json.dumps({"title": "One"}))
-    _, second = _post(base, json.dumps({"title": "Two"}))
+    _, first = _post(base, json.dumps({"title": "One", "description": "A."}))
+    _, second = _post(base, json.dumps({"title": "Two", "description": "B."}))
     assert first["id"] == "WEB-001"
     assert second["id"] == "WEB-002"
 
@@ -391,8 +393,9 @@ def test_post_task_includes_optional_fields(web_env):
         json.dumps(
             {
                 "title": "  Refactor the cache  ",
-                "description": "Make it faster.",
+                "description": "  Make it faster.  ",
                 "acceptance_criteria": ["no regressions", "tests pass"],
+                "agent_command": 'claude -p "$FACTORY_TASK" --model haiku',
             }
         ),
     )
@@ -400,6 +403,7 @@ def test_post_task_includes_optional_fields(web_env):
     assert data["title"] == "Refactor the cache"
     assert data["description"] == "Make it faster."
     assert data["acceptance_criteria"] == ["no regressions", "tests pass"]
+    assert data["agent_command"] == 'claude -p "$FACTORY_TASK" --model haiku'
     assert data["created_at"]
     assert data["updated_at"]
 
@@ -413,6 +417,15 @@ def test_post_task_validation_errors(web_env):
         assert status == 400
         assert data["error"]
 
+    for payload in (
+        {"title": "x"},
+        {"title": "x", "description": "   "},
+        {"title": "x", "description": ""},
+    ):
+        status, data = _post(base, json.dumps(payload))
+        assert status == 400
+        assert data["error"] == "description is required"
+
     status, data = _post(base, "{not json")
     assert status == 400
     assert data["error"]
@@ -425,12 +438,27 @@ def test_post_task_validation_errors(web_env):
     assert status == 400
     assert data["error"]
 
-    status, data = _post(base, json.dumps({"title": "x", "description": 1}))
+    status, data = _post(
+        base, json.dumps({"title": "x", "description": 1})
+    )
     assert status == 400
     assert data["error"]
 
     status, data = _post(
-        base, json.dumps({"title": "x", "acceptance_criteria": "nope"})
+        base, json.dumps({"title": "x", "description": "y", "acceptance_criteria": "nope"})
+    )
+    assert status == 400
+    assert data["error"]
+
+    status, data = _post(
+        base,
+        json.dumps({"title": "x", "description": "y", "agent_command": 42}),
+    )
+    assert status == 400
+    assert data["error"]
+
+    status, data = _post(
+        base, json.dumps({"title": "x", "description": "y", "agent_command": ""})
     )
     assert status == 400
     assert data["error"]
@@ -463,7 +491,7 @@ def test_post_task_id_collision_409(web_env, monkeypatch):
     monkeypatch.setattr(central_module, "web_task_id_for", lambda tasks: "TASK-001")
     status, data = _post(
         f"http://127.0.0.1:{server.port}/api/instances/alpha/tasks",
-        json.dumps({"title": "Duplicate"}),
+        json.dumps({"title": "Duplicate", "description": "x"}),
     )
     assert status == 409
     assert data["error"]
@@ -476,7 +504,7 @@ def test_post_task_does_not_leak_failed_task(web_env, monkeypatch):
     monkeypatch.setattr(central_module, "web_task_id_for", lambda tasks: "TASK-001")
     _post(
         f"http://127.0.0.1:{server.port}/api/instances/alpha/tasks",
-        json.dumps({"title": "Duplicate"}),
+        json.dumps({"title": "Duplicate", "description": "x"}),
     )
     status, tasks = _get(f"http://127.0.0.1:{server.port}/api/instances/alpha/tasks")
     assert status == 200

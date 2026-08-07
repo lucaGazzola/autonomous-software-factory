@@ -126,6 +126,8 @@ class JSONBacklog:
                 raise ValueError(f"{field} must be a string")
         if "title" in updates and not updates["title"].strip():
             raise ValueError("title must be a non-blank string")
+        if "description" in updates and not updates["description"].strip():
+            raise ValueError("description must be a non-blank string")
         for field in ("acceptance_criteria", "dependencies", "files_to_modify"):
             if field in updates and (
                 not isinstance(updates[field], list)
@@ -209,5 +211,6 @@ class JSONBacklog:
             return Task(
                 id=str(entry.get("id", "<unknown>")),
                 title="<unparsable task>",
+                description="<unparsable task>",
                 status=TaskStatus.FAILED,
             )

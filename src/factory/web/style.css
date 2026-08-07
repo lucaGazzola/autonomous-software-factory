@@ -116,23 +116,33 @@ body {
 
 .new-task {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 12px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 14px;
   padding: 16px 0;
   border-bottom: 1px solid var(--border);
 }
 
 .new-task__fields {
   display: flex;
-  flex: 1 1 auto;
-  flex-wrap: wrap;
-  gap: 10px;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
   min-width: 0;
 }
 
-.new-task input[type="text"] {
-  flex: 1 1 220px;
+.new-task__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.new-task input[type="text"],
+.new-task textarea {
+  width: 100%;
+  max-width: 640px;
   min-width: 0;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -145,13 +155,40 @@ body {
   transition: border-color 0.18s ease, background 0.18s ease;
 }
 
-.new-task input[type="text"]::placeholder {
+.new-task textarea {
+  resize: vertical;
+}
+
+.new-task input[type="text"]::placeholder,
+.new-task textarea::placeholder {
   color: var(--text-faint);
 }
 
-.new-task input[type="text"]:focus {
+.new-task input[type="text"]:focus,
+.new-task textarea:focus {
   border-color: var(--accent);
   background: var(--surface-hover);
+}
+
+.new-task__criteria-row {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  max-width: 640px;
+}
+
+.new-task__criteria-row input[type="text"] {
+  flex: 1;
+  width: auto;
+  max-width: none;
+}
+
+.new-task__add {
+  flex: none;
+  width: 38px;
+  padding: 9px 0;
+  font-size: 18px;
+  line-height: 1;
 }
 
 .new-task button {
@@ -172,8 +209,42 @@ body {
   border-color: var(--accent);
 }
 
+.new-task__criteria-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.new-task__criteria-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text);
+  font-size: 13px;
+  padding: 4px 10px;
+}
+
+.new-task__criteria-remove {
+  border: 0;
+  background: none;
+  color: var(--text-faint);
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 2px;
+  cursor: pointer;
+}
+
+.new-task__criteria-remove:hover {
+  color: var(--failed);
+}
+
 .new-task__error {
-  flex-basis: 100%;
   margin: 0;
   font-size: 13px;
   color: var(--failed);

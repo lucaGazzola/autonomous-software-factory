@@ -57,9 +57,26 @@
   <main id="tab-create" class="tab-panel" hidden>
     <form class="new-task" id="new-task">
       <div class="new-task__fields">
-        <input id="task-title" name="title" type="text" placeholder="New task title" autocomplete="off">
-        <input id="task-description" name="description" type="text" placeholder="Description (optional)" autocomplete="off">
-        <input id="task-acceptance" name="acceptance_criteria" type="text" placeholder="Acceptance criteria, comma-separated (optional)" autocomplete="off">
+        <label class="new-task__field" for="task-title">
+          <span>Title</span>
+          <input id="task-title" name="title" type="text" placeholder="New task title" autocomplete="off" required>
+        </label>
+        <label class="new-task__field" for="task-description">
+          <span>Description</span>
+          <textarea id="task-description" name="description" rows="3" placeholder="What should the agent do?" autocomplete="off" required></textarea>
+        </label>
+        <div class="new-task__field">
+          <span>Acceptance criteria</span>
+          <div class="new-task__criteria-row">
+            <input id="task-acceptance-input" type="text" placeholder="e.g. passes pytest" autocomplete="off">
+            <button class="new-task__add" id="task-acceptance-add" type="button" aria-label="Add acceptance criterion">+</button>
+          </div>
+          <ul class="new-task__criteria-list" id="task-acceptance-list"></ul>
+        </div>
+        <label class="new-task__field" for="task-command">
+          <span>Agent command (optional)</span>
+          <input id="task-command" name="agent_command" type="text" placeholder="e.g. claude -p &quot;$FACTORY_TASK&quot; --model claude-3-haiku" autocomplete="off">
+        </label>
       </div>
       <button type="submit">Add task</button>
       <p class="new-task__error" id="new-task-error" hidden></p>

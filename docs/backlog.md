@@ -28,7 +28,7 @@ Each entry in `tasks` is a task object:
 | --- | --- | --- | --- |
 | `id` | string | — | Unique task id (e.g. `TASK-001`). Duplicate ids are rejected. |
 | `title` | string | — | Short title; shown in logs, commit messages and status. |
-| `description` | string | `""` | Longer description handed to the agent. |
+| `description` | string | — | Longer description handed to the agent. Must be non-blank. |
 | `status` | string | `OPEN` | One of `OPEN`, `BLOCKED`, `COMPLETED`, `FAILED`. |
 | `created_at` | ISO-8601 datetime | now (UTC) | When the task was created; used for oldest-first ordering. |
 | `updated_at` | ISO-8601 datetime | now (UTC) | Bumped whenever the status changes. |
@@ -38,8 +38,8 @@ Each entry in `tasks` is a task object:
 | `agent_command` | string / list[string] | — | Override the configured `agent_command` for this task (e.g. route it to a different model). Validated like the global key; falls back to the config default when omitted. |
 | `agent_timeout_seconds` | number | — | Override the configured `agent_timeout_seconds` for this task (must be positive). Falls back to the config default when omitted. |
 
-Only `id`, `title`, and `status` (optionally) are required; every other field
-is optional.
+Only `id`, `title`, `description`, and `status` (optionally) are required;
+every other field is optional.
 
 ### Per-task agent routing
 

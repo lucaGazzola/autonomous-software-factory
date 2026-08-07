@@ -281,6 +281,8 @@
       badge.className = "badge badge--" + status;
     }
 
+    showModalSection("task-modal-edit", (task.status || "OPEN") === "OPEN");
+
     setText("task-modal-description", task.description || "");
     var acceptance = document.getElementById("task-modal-acceptance");
     if (acceptance) {
@@ -617,6 +619,51 @@
     var error = document.getElementById("new-task-error");
     if (!form || !API) return;
 
+    var criteria = [];
+    var criteriaInput = document.getElementById("task-acceptance-input");
+    var criteriaList = document.getElementById("task-acceptance-list");
+
+    function renderCriteria() {
+      if (!criteriaList) return;
+      criteriaList.textContent = "";
+      criteria.forEach(function (criterion, index) {
+        var chip = el("li", "new-task__criteria-chip", null);
+        chip.appendChild(document.createTextNode(criterion));
+        var remove = document.createElement("button");
+        remove.type = "button";
+        remove.className = "new-task__criteria-remove";
+        remove.setAttribute("aria-label", "Remove acceptance criterion");
+        remove.textContent = "×";
+        remove.addEventListener("click", function () {
+          criteria.splice(index, 1);
+          renderCriteria();
+        });
+        chip.appendChild(remove);
+        criteriaList.appendChild(chip);
+      });
+    }
+
+    function addCriterion() {
+      if (!criteriaInput) return;
+      var value = criteriaInput.value.trim();
+      if (!value) return;
+      criteria.push(value);
+      criteriaInput.value = "";
+      criteriaInput.focus();
+      renderCriteria();
+    }
+
+    var addButton = document.getElementById("task-acceptance-add");
+    if (addButton) addButton.addEventListener("click", addCriterion);
+    if (criteriaInput) {
+      criteriaInput.addEventListener("keydown", function (event) {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          addCriterion();
+        }
+      });
+    }
+
     form.addEventListener("submit", function (event) {
       event.preventDefault();
       if (error) error.hidden = true;
@@ -630,15 +677,25 @@
         return;
       }
       var description = document.getElementById("task-description").value.trim();
-      var rawCriteria = document.getElementById("task-acceptance").value.trim();
-      var acceptance = rawCriteria
-        ? rawCriteria.split(",").map(function (s) { return s.trim(); }).filter(Boolean)
-        : [];
+      if (!description) {
+        if (error) {
+          error.textContent = "description is required";
+          error.hidden = false;
+        }
+        return;
+      }
+      var commandInput = document.getElementById("task-command");
+      var command = commandInput ? commandInput.value.trim() : "";
 
       fetch(API + "tasks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: title, description: description, acceptance_criteria: acceptance }),
+        body: JSON.stringify({
+          title: title,
+          description: description,
+          acceptance_criteria: criteria.slice(),
+          agent_command: command ? command : null,
+        }),
       })
         .then(function (resp) {
           if (!resp.ok) {
@@ -650,6 +707,8 @@
         })
         .then(function () {
           form.reset();
+          criteria = [];
+          renderCriteria();
           return fetchJSON(API + "tasks");
         })
         .then(function (tasks) {
