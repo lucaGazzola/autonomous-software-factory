@@ -10,31 +10,33 @@
 [![CI](https://github.com/lucaGazzola/forgeo/actions/workflows/ci.yml/badge.svg)](https://github.com/lucaGazzola/forgeo/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**Forgeo is an autonomous software forgeo for people with ideas, not teams.**
-You have a product idea — an app, a website, an internal automation — but no
+**Forgeo is an autonomous software forgeo for people with ideas.**
+You have a product idea (an app, a website, an internal automation) but no
 developers on staff. With Forgeo you don't need any: you write down what needs
 to be built as a simple list of tasks, and an AI coding agent works through the
 list on its own, writing the code and committing it to your repository. No
 branches, no pull requests, no developer to hire.
 
 All you need is basic comfort with a terminal, a git repository, and any coding
-agent CLI — Claude Code, aider, opencode, or your own script. Forgeo works with
+agent CLI (Claude Code, aider, opencode, or your own script). Forgeo works with
 all of them.
 
 Forgeo decides what to do next on its own: while tasks are left it implements
 the oldest one and commits the result, and when the backlog is empty it reviews
 the codebase and cleans it up. It only interrupts you when a decision is
-genuinely yours to make — everything else happens autonomously.
+genuinely yours to make, everything else happens autonomously.
 
 ## Quickstart
 
-Requires a git repository (no Python needed — the one-liner downloads a
-prebuilt binary for your OS, or `pipx install forgeo-cli` works too). The full
-walkthrough is in [Getting started](docs/getting-started.md).
+The full walkthrough is in [Getting started](docs/getting-started.md).
 
 ```bash
 # 1. Install
 curl -fsSL https://forgeo.org/install.sh | bash
+
+or
+
+pipx install forgeo-cli
 
 # 2. Create your Forgeo (guided wizard, run from your project root)
 forgeo init
@@ -45,17 +47,16 @@ forgeo start   # run forever: every interval_minutes, implement the oldest OPEN 
 
 `forgeo init` writes `forgeo.yaml` and a `.forgeo/` folder for the backlog
 and logs, gitignored for you. Fill the backlog with plain JSON tasks (see
-[Backlog format](docs/backlog.md)) — or add them from the web console while
-it runs — and Forgeo does the rest. The daemon binds no ports; open the
-dashboard with `forgeo web` (default <http://0.0.0.0:8790>):
+[Backlog format](docs/backlog.md)) or add them from the web console while
+it runs, Forgeo does the rest. Open the dashboard with `forgeo web` (default <http://0.0.0.0:8790>):
 
 ![Forgeo web console](docs/img/console.png)
 
 One-off commands: `forgeo once` (single cycle), `forgeo status` (summary),
-`forgeo stop`, `forgeo restart` — every command is in the
+`forgeo stop`, `forgeo restart`, every command is in the
 [CLI reference](docs/cli-reference.md).
 
-You can run several factories at once, one per repository — each config is
+You can run several factories at once, one per repository, each config is
 fully independent (own backlog, logs, locks). Register each `forgeo.yaml`
 in the instance registry with `forgeo instance add NAME --config PATH`,
 manage any of them by name with `forgeo start/status/stop --name NAME`,
