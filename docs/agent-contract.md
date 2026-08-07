@@ -1,7 +1,6 @@
 # Agent contract
 
-The coding agent is **any shell command** — a CLI coding tool (aider, Claude
-Code, a custom script) or a plain command. It must be able to:
+The coding agent is **any shell command**: a CLI coding tool or a plain command. It must be able to:
 
 1. read the task from the `FORGEO_TASK` environment variable,
 2. work on the repository from the current working directory,

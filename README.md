@@ -10,21 +10,17 @@
 [![CI](https://github.com/lucaGazzola/forgeo/actions/workflows/ci.yml/badge.svg)](https://github.com/lucaGazzola/forgeo/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**Forgeo is an autonomous software forgeo for people with ideas.**
-You have a product idea (an app, a website, an internal automation) but no
-developers on staff. With Forgeo you don't need any: you write down what needs
-to be built as a simple list of tasks, and an AI coding agent works through the
-list on its own, writing the code and committing it to your repository. No
-branches, no pull requests, no developer to hire.
+**Forgeo is a software factory for your coding-agent.**
+You're already working with an AI coding agent, prompting it task by task
+or giving it a goal. Forgeo organizes your work in a structured way with
+a backlog, and it decides what to work on next, runs your
+agent on it, and commits the result. Progress, pending decisions, and history
+are tracked in plain files you can inspect at any time, plus a web dashboard.
+Forgeo only interrupts you when a decision is genuinely yours to
+make, everything else happens autonomously.
 
 All you need is basic comfort with a terminal, a git repository, and any coding
-agent CLI (Claude Code, aider, opencode, or your own script). Forgeo works with
-all of them.
-
-Forgeo decides what to do next on its own: while tasks are left it implements
-the oldest one and commits the result, and when the backlog is empty it reviews
-the codebase and cleans it up. It only interrupts you when a decision is
-genuinely yours to make, everything else happens autonomously.
+agent CLI.
 
 ## Quickstart
 
@@ -46,7 +42,7 @@ forgeo start   # run forever: every interval_minutes, implement the oldest OPEN 
 ```
 
 `forgeo init` writes `forgeo.yaml` and a `.forgeo/` folder for the backlog
-and logs, gitignored for you. Fill the backlog with plain JSON tasks (see
+and logs. Fill the backlog with plain JSON tasks (see
 [Backlog format](docs/backlog.md)) or add them from the web console while
 it runs, Forgeo does the rest. Open the dashboard with `forgeo web` (default <http://0.0.0.0:8790>):
 

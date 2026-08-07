@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Forgeo — The autonomous software forgeo</title>
-<meta name="description" content="Forgeo is an autonomous software forgeo: write your tasks, and an AI coding agent builds, commits, and ships your software — no development team required.">
-<meta property="og:title" content="Forgeo — The autonomous software forgeo">
-<meta property="og:description" content="Turn a backlog into shipped software. An AI agent does the building; Forgeo does the managing. No development team required.">
+<title>Forgeo — The software factory for your coding agent</title>
+<meta name="description" content="Forgeo is a software factory for your coding agent: organize your work in a structured backlog and Forgeo runs your agent on each task, committing the results.">
+<meta property="og:title" content="Forgeo: The software factory for your coding agent">
+<meta property="og:description" content="Turn a backlog into shipped software. An AI agent does the building; Forgeo organizes the work, tracks progress, and commits the results.">
 <meta property="og:type" content="website">
 <meta property="og:image" content="/img/console.png">
 <link rel="icon" href="/img/logo.png">
@@ -208,10 +208,11 @@
   <div class="wrap">
     <h1>You write the tasks.<br>Forgeo <span class="grad">builds the software.</span></h1>
     <p class="lead">
-      A scheduled forgeo for your repository. You keep a simple list of tasks —
-      an AI coding agent works through it, writing and committing real code to
-      <strong>main</strong>. No branches, no pull requests, <strong>no developer on
-      staff</strong>. If you can describe what to build, Forgeo can build it.
+      A scheduled factory for your repository. Forgeo organizes your work into a factory:
+      keep a simple backlog of tasks, and it decides what to work on next, runs
+      your agent, and commits the result. No branches,
+      no pull requests. Progress, decisions, and history tracked in plain
+      files, plus a web dashboard.
     </p>
     <div class="cta">
       <a class="btn btn-primary" href="/docs/getting-started/">
@@ -228,7 +229,7 @@
       <div class="term">
         <div class="term-bar">
           <span class="dot-x"></span><span class="dot-y"></span><span class="dot-z"></span>
-          <span class="term-title">terminal — install &amp; launch your forgeo</span>
+          <span class="term-title">terminal: install &amp; launch your factory</span>
         </div>
         <div class="term-body">
           <div class="cmd">
@@ -241,7 +242,7 @@
           <code>forgeo init</code> &nbsp;·&nbsp; guided wizard in your project root &nbsp;—&nbsp; then <code>forgeo start</code> and watch it ship.
         </div>
       </div>
-      <p class="hint">Works with Claude Code, aider, opencode or any CLI agent — see the <a href="/docs/agent-contract/">agent contract</a>.</p>
+      <p class="hint">Works with Claude Code, Codex, opencode or any CLI agent: see the <a href="/docs/agent-contract/">agent contract</a>.</p>
     </div>
   </div>
 </header>
@@ -250,12 +251,12 @@
   <div class="wrap">
     <span class="eyebrow">How it works</span>
     <h2>From backlog to shipped code, on repeat</h2>
-    <p class="sub">Three steps and Forgeo runs forever — waking up on its own schedule and deciding what to do next.</p>
+    <p class="sub">Three steps and Forgeo runs forever, waking up on its own schedule and deciding what to do next.</p>
     <div class="steps">
       <div class="step">
         <span class="step-num">01</span>
         <h3>Write your tasks</h3>
-        <p>Describe what needs to be built in a plain JSON backlog — or just type it into the web console. One task at a time, in the order you wrote them.</p>
+        <p>Describe what needs to be built in a plain JSON backlog, or just type it into the web console. One task at a time, in the order you wrote them.</p>
       </div>
       <div class="step">
         <span class="step-num">02</span>
@@ -275,7 +276,7 @@
   <div class="wrap">
     <span class="eyebrow">See it running</span>
     <h2>A live dashboard, not a black box</h2>
-    <p class="sub">Forgeo serves a live web dashboard while it works — every cycle, outcome, log line and blocker, visible at a glance. Running several factories? <code style="font-family:var(--mono);color:#c7d2fe">forgeo web</code> gives you one dashboard for all of them.</p>
+    <p class="sub">Forgeo serves a live web dashboard while it works: every cycle, outcome, log line and blocker, visible at a glance. Running several factories? <code style="font-family:var(--mono);color:#c7d2fe">forgeo web</code> gives you one dashboard for all of them.</p>
     <div class="shot-wrap">
       <div class="browser">
         <div class="browser-bar">
@@ -284,7 +285,7 @@
         </div>
         <img src="/img/console.png" alt="Forgeo web console dashboard">
       </div>
-      <p class="shot-caption">The Forgeo web console — every forgeo instance's backlog, run history and logs, in one dashboard at port 8790.</p>
+      <p class="shot-caption">The Forgeo web console: every forgeo instance's backlog, run history and logs, in one dashboard at port 8790.</p>
     </div>
   </div>
 </section>
@@ -292,8 +293,8 @@
 <section id="features">
   <div class="wrap">
     <span class="eyebrow">Why Forgeo</span>
-    <h2>Engineering without an engineering team</h2>
-    <p class="sub">Everything a small software org would do by hand, automated around a single repository and a single branch.</p>
+    <h2>From loop engineering to software factory</h2>
+    <p class="sub">Stop keeping the state of your work in your head. A backlog you can see, one task at a time, every result committed. Forgeo only interrupts you when a decision is genuinely yours.</p>
     <div class="feats">
       <div class="feat">
         <div class="feat-icon">
@@ -307,7 +308,7 @@
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M3 16h14M6 13V7l3 3 2-6 3 5 2-2v6" stroke="#a5b4fc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </div>
         <h3>Agent-agnostic</h3>
-        <p>Any coding agent that can read an environment variable — Claude Code, aider, opencode, or your own script.</p>
+        <p>Any coding agent that can read an environment variable: Claude Code, Codex, opencode, or your own script.</p>
       </div>
       <div class="feat">
         <div class="feat-icon">
@@ -321,7 +322,7 @@
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M10 3v14M10 3L6 7M10 3l4 4M10 17l-4-4M10 17l4-4" stroke="#a5b4fc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </div>
         <h3>Self-maintaining</h3>
-        <p>When the backlog is empty the agent refactors: dead code, duplication, stale comments — kept tidy, automatically.</p>
+        <p>When the backlog is empty the agent refactors: dead code, duplication, stale comments. Everything is kept tidy, automatically.</p>
       </div>
       <div class="feat">
         <div class="feat-icon">
@@ -335,17 +336,16 @@
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><rect x="3" y="3" width="14" height="14" rx="3" stroke="#a5b4fc" stroke-width="2"/><path d="M7 10l2 2 4-4" stroke="#a5b4fc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </div>
         <h3>Keeps you posted</h3>
-        <p>A web console for each forgeo, one central dashboard for all of them, plus optional Telegram notifications when your input is needed — nothing else disturbs you.</p>
+        <p>One central dashboard that keeps track of the instances, plus optional Telegram notifications when your input is needed.</p>
       </div>
     </div>
 
     <div class="agents">
-      <p><strong style="color:var(--text)">Bring your own agent</strong> — Forgeo orchestrates, your favourite CLI builds:</p>
+      <p><strong style="color:var(--text)">Bring your own agent</strong>: Forgeo orchestrates, your favourite CLI builds:</p>
       <div class="agent-chips">
         <span class="chip">claude</span>
-        <span class="chip">aider</span>
-        <span class="chip">opencode</span>
         <span class="chip">codex</span>
+        <span class="chip">opencode</span>
         <span class="chip">any CLI script</span>
       </div>
     </div>
@@ -356,7 +356,7 @@
   <div class="wrap">
     <div class="cta-box">
       <span class="eyebrow">Ready when you are</span>
-      <h2>Start your forgeo tonight</h2>
+      <h2>Start your factory tonight</h2>
       <p class="sub">Install with a one-liner, run <code style="font-family:var(--mono);color:#c7d2fe">forgeo init</code> in your project, and let the agent do the work.</p>
       <div class="cta">
         <a class="btn btn-primary" href="/docs/getting-started/">Read getting started</a>
