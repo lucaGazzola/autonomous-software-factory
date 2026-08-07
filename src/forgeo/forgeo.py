@@ -196,8 +196,6 @@ class Forgeo:
             "blocked": RunOutcome.BLOCKED,
             "paused": RunOutcome.PAUSED,
             "dirty": RunOutcome.DIRTY,
-            "skipped": RunOutcome.SKIPPED,
-            "error": RunOutcome.ERROR,
         }.get(outcome, RunOutcome.ERROR)
 
     def _run_exit_code(self, outcome: str) -> int | None:

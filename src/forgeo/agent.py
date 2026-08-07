@@ -47,9 +47,7 @@ def _kill_process_group(proc: asyncio.subprocess.Process) -> None:
     """
     try:
         os.killpg(proc.pid, signal.SIGKILL)
-    except ProcessLookupError:
-        proc.kill()
-    except PermissionError:
+    except (ProcessLookupError, PermissionError):
         proc.kill()
 
 

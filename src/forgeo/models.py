@@ -81,7 +81,6 @@ class RunOutcome(str, enum.Enum):
     ERROR = "ERROR"
     PAUSED = "PAUSED"
     DIRTY = "DIRTY"
-    SKIPPED = "SKIPPED"
 
 
 class RunRecord(BaseModel):

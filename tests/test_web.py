@@ -770,6 +770,54 @@ def test_parser_help_lists_web(capsys):
     assert "web" in capsys.readouterr().out
 
 
+def test_do_get_returns_500_on_unexpected_error(web_env, monkeypatch):
+    import forgeo.central as central_module
+
+    server, _ = web_env
+
+    def boom() -> list:
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(central_module, "list_instances", boom)
+    status, data = _get(f"http://127.0.0.1:{server.port}/api/instances")
+    assert status == 500
+    assert data["error"] == "internal server error"
+
+
+def test_do_post_returns_500_on_unexpected_error(web_env, monkeypatch):
+    import forgeo.central as central_module
+
+    server, _ = web_env
+
+    def boom(name: str) -> None:
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(central_module, "get_instance", boom)
+    status, data = _post(
+        f"http://127.0.0.1:{server.port}/api/instances/alpha/tasks",
+        json.dumps({"title": "x", "description": "y"}),
+    )
+    assert status == 500
+    assert data["error"] == "internal server error"
+
+
+def test_do_patch_returns_500_on_unexpected_error(web_env, monkeypatch):
+    import forgeo.central as central_module
+
+    server, _ = web_env
+
+    def boom(name: str) -> None:
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(central_module, "get_instance", boom)
+    status, data = _patch(
+        f"http://127.0.0.1:{server.port}/api/instances/alpha/tasks/TASK-001",
+        json.dumps({"title": "x"}),
+    )
+    assert status == 500
+    assert data["error"] == "internal server error"
+
+
 def test_web_bind_failure_exits_nonzero():
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.bind(("127.0.0.1", 0))

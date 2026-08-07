@@ -71,16 +71,14 @@ class JSONBacklog:
     async def get_task(self, task_id: str) -> Task | None:
         """Return a task by id, or ``None`` if it does not exist."""
         store = await self._read()
-        for entry in store["tasks"]:
-            if entry["id"] == task_id:
-                return self._to_task(entry)
-        return None
+        entry = self._entry_by_id(store, task_id)
+        return self._to_task(entry) if entry is not None else None
 
     async def create_task(self, task: Task) -> Task:
         """Persist ``task``, rejecting duplicate ids with a ``ValueError``."""
         async with self._lock:
             store = await self._read()
-            if any(entry["id"] == task.id for entry in store["tasks"]):
+            if self._entry_by_id(store, task.id) is not None:
                 raise ValueError(f"Task id already exists in backlog: {task.id!r}")
             store["tasks"].append(task.model_dump(mode="json"))
             await self._write(store)
@@ -90,15 +88,13 @@ class JSONBacklog:
         """Transition a task's status, bumping its ``updated_at`` timestamp."""
         async with self._lock:
             store = await self._read()
-            updated: Task | None = None
-            for entry in store["tasks"]:
-                if entry["id"] == task_id:
-                    entry["status"] = status.value
-                    entry["updated_at"] = datetime.now(UTC).isoformat()
-                    updated = self._to_task(entry)
-                    break
-            if updated is not None:
-                await self._write(store)
+            entry = self._entry_by_id(store, task_id)
+            if entry is None:
+                return None
+            entry["status"] = status.value
+            entry["updated_at"] = datetime.now(UTC).isoformat()
+            updated = self._to_task(entry)
+            await self._write(store)
         return updated
 
     async def update_task(
@@ -136,27 +132,34 @@ class JSONBacklog:
 
         async with self._lock:
             store = await self._read()
-            for entry in store["tasks"]:
-                if entry["id"] != task_id:
-                    continue
-                candidate = dict(entry)
-                candidate.update(updates)
-                candidate["updated_at"] = datetime.now(UTC).isoformat()
-                try:
-                    task = Task.model_validate(candidate)
-                except ValidationError as exc:
-                    raise ValueError(f"invalid task field(s): {exc}") from exc
-                normalized = task.model_dump(mode="json")
-                for field in updates:
-                    entry[field] = normalized[field]
-                entry["updated_at"] = normalized["updated_at"]
-                await self._write(store)
-                return task
-        return None
+            entry = self._entry_by_id(store, task_id)
+            if entry is None:
+                return None
+            candidate = dict(entry)
+            candidate.update(updates)
+            candidate["updated_at"] = datetime.now(UTC).isoformat()
+            try:
+                task = Task.model_validate(candidate)
+            except ValidationError as exc:
+                raise ValueError(f"invalid task field(s): {exc}") from exc
+            normalized = task.model_dump(mode="json")
+            for field in updates:
+                entry[field] = normalized[field]
+            entry["updated_at"] = normalized["updated_at"]
+            await self._write(store)
+            return task
 
     # ------------------------------------------------------------------ #
     # Internal persistence helpers                                        #
     # ------------------------------------------------------------------ #
+
+    @staticmethod
+    def _entry_by_id(store: dict[str, Any], task_id: str) -> Any:
+        """The stored dict for ``task_id``, or ``None`` when it is absent."""
+        for entry in store["tasks"]:
+            if entry["id"] == task_id:
+                return entry
+        return None
 
     async def _read(self) -> dict[str, Any]:
         """Load the store from disk, tolerating a missing or corrupt file."""

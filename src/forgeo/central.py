@@ -36,6 +36,7 @@ import logging
 import re
 import signal
 import threading
+from collections.abc import Callable
 from datetime import timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -54,7 +55,7 @@ from forgeo.instances import (
     list_instances,
     registry_path,
 )
-from forgeo.models import Task, TaskStatus
+from forgeo.models import ForgeoConfig, Task, TaskStatus
 from forgeo.runs import RunRecorder, runs_path_for
 from forgeo.web_common import (
     DEFAULT_LOG_LINES,
@@ -270,58 +271,67 @@ def make_handler() -> type[BaseHTTPRequestHandler]:
                 return
             self._send_bytes(200, static.read_bytes(), guess_content_type(static))
 
+        def _run_safely(self, handler: Callable[[], None]) -> None:
+            """Run ``handler``, sending a 500 and logging on any exception.
+
+            A request handler must never crash the server thread; anything it
+            raises is caught here, logged, and answered with a JSON 500.
+            """
+            try:
+                handler()
+            except Exception:
+                logger.exception("Web request failed: %s", urlparse(self.path).path)
+                self._send_json(500, {"error": "internal server error"})
+
         def do_GET(self) -> None:
+            self._run_safely(self._do_get)
+
+        def _do_get(self) -> None:
             parsed = urlparse(self.path)
             path = parsed.path
             query = parse_qs(parsed.query)
 
-            try:
-                if path == "/api/instances":
-                    self._send_json(200, [_summary(info) for info in list_instances()])
-                    return
-                if path.startswith("/api/instances/"):
-                    self._handle_instance_api(path, query)
-                    return
-                if path == "/":
-                    self._send_static(safe_static_path(_HOME_PAGE))
-                    return
-                if path.startswith("/instances/"):
-                    self._handle_instance_page(path)
-                    return
-                static = safe_static_path(path)
-                if static is not None:
-                    self._send_static(static)
-                    return
-                self._send_json(404, {"error": "not found"})
-            except Exception:
-                logger.exception("Web request failed: %s", path)
-                self._send_json(500, {"error": "internal server error"})
+            if path == "/api/instances":
+                self._send_json(200, [_summary(info) for info in list_instances()])
+                return
+            if path.startswith("/api/instances/"):
+                self._handle_instance_api(path, query)
+                return
+            if path == "/":
+                self._send_static(safe_static_path(_HOME_PAGE))
+                return
+            if path.startswith("/instances/"):
+                self._handle_instance_page(path)
+                return
+            static = safe_static_path(path)
+            if static is not None:
+                self._send_static(static)
+                return
+            self._send_json(404, {"error": "not found"})
 
         def do_POST(self) -> None:
+            self._run_safely(self._do_post)
+
+        def _do_post(self) -> None:
             parsed = urlparse(self.path)
             path = parsed.path
 
-            try:
-                if path.startswith("/api/instances/"):
-                    self._post_instance_task(path)
-                    return
-                self._send_json(404, {"error": "not found"})
-            except Exception:
-                logger.exception("Web request failed: %s", path)
-                self._send_json(500, {"error": "internal server error"})
+            if path.startswith("/api/instances/"):
+                self._post_instance_task(path)
+                return
+            self._send_json(404, {"error": "not found"})
 
         def do_PATCH(self) -> None:
+            self._run_safely(self._do_patch)
+
+        def _do_patch(self) -> None:
             parsed = urlparse(self.path)
             path = parsed.path
 
-            try:
-                if path.startswith("/api/instances/"):
-                    self._patch_instance_task(path)
-                    return
-                self._send_json(404, {"error": "not found"})
-            except Exception:
-                logger.exception("Web request failed: %s", path)
-                self._send_json(500, {"error": "internal server error"})
+            if path.startswith("/api/instances/"):
+                self._patch_instance_task(path)
+                return
+            self._send_json(404, {"error": "not found"})
 
         def _read_json_body(self) -> dict[str, Any] | None:
             """Read and parse the request body as a JSON object.
@@ -349,20 +359,37 @@ def make_handler() -> type[BaseHTTPRequestHandler]:
                 return None
             return payload
 
-        def _post_instance_task(self, path: str) -> None:
-            """Create a task in an instance's backlog from a JSON body."""
+        def _resolve_task_target(
+            self, path: str, *, with_task_id: bool
+        ) -> tuple[ForgeoConfig, str | None] | None:
+            """Resolve the instance config (+ optional task id) from an API path.
+
+            Sends the matching 404/500 error and returns ``None`` when the
+            instance is unknown, the path shape is wrong, or the instance
+            config is unavailable.
+            """
             parts = path[len("/api/instances/") :].split("/")
             name = unquote(parts[0])
             info = get_instance(name)
             if info is None:
                 self._send_json(404, {"error": "unknown instance"})
-                return
-            if len(parts) != 2 or parts[1] != "tasks":
+                return None
+            expected = 3 if with_task_id else 2
+            if len(parts) != expected or parts[1] != "tasks":
                 self._send_json(404, {"error": "not found"})
-                return
+                return None
             if info.config is None:
                 self._send_json(500, {"error": "instance config not available"})
+                return None
+            task_id = unquote(parts[2]) if with_task_id else None
+            return info.config, task_id
+
+        def _post_instance_task(self, path: str) -> None:
+            """Create a task in an instance's backlog from a JSON body."""
+            target = self._resolve_task_target(path, with_task_id=False)
+            if target is None:
                 return
+            config, _ = target
 
             payload = self._read_json_body()
             if payload is None:
@@ -392,7 +419,7 @@ def make_handler() -> type[BaseHTTPRequestHandler]:
                 )
                 return
 
-            backlog = JSONBacklog(info.config.backlog)
+            backlog = JSONBacklog(config.backlog)
             existing = asyncio.run(backlog.list_tasks())
             task = Task(
                 id=web_task_id_for(existing),
@@ -412,20 +439,11 @@ def make_handler() -> type[BaseHTTPRequestHandler]:
 
         def _patch_instance_task(self, path: str) -> None:
             """Update a task in an instance's backlog from a JSON body."""
-            parts = path[len("/api/instances/") :].split("/")
-            name = unquote(parts[0])
-            info = get_instance(name)
-            if info is None:
-                self._send_json(404, {"error": "unknown instance"})
+            target = self._resolve_task_target(path, with_task_id=True)
+            if target is None:
                 return
-            if len(parts) != 3 or parts[1] != "tasks":
-                self._send_json(404, {"error": "not found"})
-                return
-            if info.config is None:
-                self._send_json(500, {"error": "instance config not available"})
-                return
-            task_id = unquote(parts[2])
-
+            config, task_id = target
+            assert task_id is not None  # with_task_id=True resolves a task id
             payload = self._read_json_body()
             if payload is None:
                 return
@@ -433,7 +451,7 @@ def make_handler() -> type[BaseHTTPRequestHandler]:
                 self._send_json(400, {"error": "request body must not be empty"})
                 return
 
-            backlog = JSONBacklog(info.config.backlog)
+            backlog = JSONBacklog(config.backlog)
             try:
                 updated = asyncio.run(backlog.update_task(task_id, payload))
             except ValueError as exc:

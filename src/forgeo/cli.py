@@ -518,14 +518,30 @@ def _load_config_or_error(config_path: Path) -> ForgeoConfig | None:
     return load_config(config_path)
 
 
-def cmd_status(args: argparse.Namespace) -> int:
-    """Handle ``forgeo status``: read-only summary; never starts an agent."""
+def _resolve_existing_config(
+    args: argparse.Namespace,
+) -> tuple[Path, ForgeoConfig] | None:
+    """Resolve ``--name``/``--config`` and load an existing config file.
+
+    Prints an error and returns ``None`` when the instance name is unknown
+    or the config file does not exist; otherwise returns the resolved
+    config path and its loaded :class:`ForgeoConfig`.
+    """
     config_path = _resolved_config_path(args)
     if config_path is None:
-        return 1
+        return None
     config = _load_config_or_error(config_path)
     if config is None:
+        return None
+    return config_path, config
+
+
+def cmd_status(args: argparse.Namespace) -> int:
+    """Handle ``forgeo status``: read-only summary; never starts an agent."""
+    resolved = _resolve_existing_config(args)
+    if resolved is None:
         return 1
+    _config_path, config = resolved
     tasks = asyncio.run(JSONBacklog(config.backlog).list_tasks())
     daemon_running = is_lock_held(config.backlog.with_suffix(".lock"))
     last_outcome = last_outcome_from_runs(config)
@@ -587,12 +603,10 @@ def _stop_daemon(config: ForgeoConfig, timeout: float) -> bool:
 
 def cmd_stop(args: argparse.Namespace) -> int:
     """Handle ``forgeo stop``: graceful daemon shutdown via SIGTERM."""
-    config_path = _resolved_config_path(args)
-    if config_path is None:
+    resolved = _resolve_existing_config(args)
+    if resolved is None:
         return 1
-    config = _load_config_or_error(config_path)
-    if config is None:
-        return 1
+    config_path, config = resolved
     _register_if_missing(args, config_path, config)
     if not is_lock_held(config.backlog.with_suffix(".lock")):
         console.print(f"[yellow]Forgeo {config.name!r} is not running.[/yellow]")
@@ -602,12 +616,10 @@ def cmd_stop(args: argparse.Namespace) -> int:
 
 def cmd_restart(args: argparse.Namespace) -> int:
     """Handle ``forgeo restart``: stop when running, then start detached."""
-    config_path = _resolved_config_path(args)
-    if config_path is None:
+    resolved = _resolve_existing_config(args)
+    if resolved is None:
         return 1
-    config = _load_config_or_error(config_path)
-    if config is None:
-        return 1
+    config_path, config = resolved
     lock_path = config.backlog.with_suffix(".lock")
     if is_lock_held(lock_path) and not _stop_daemon(config, args.timeout):
         return 1
