@@ -3,14 +3,14 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "forgeo"
-version = "0.2.1"
+name = "forgeo-cli"
+version = "0.3.0"
 description = "A scheduled software forgeo: executes backlog tasks on main, refactors when idle, and writes BLOCKER.md when it needs human input."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { file = "LICENSE" }
 authors = [{ name = "Forgeo Contributors" }]
-keywords = ["automation", "agents", "backlog", "orchestration", "scheduler"]
+keywords = ["automation", "agents", "backlog", "orchestration", "scheduler", "ai"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
@@ -26,6 +26,12 @@ dependencies = [
     "rich>=13.7",
     "PyYAML>=6.0",
 ]
+
+[project.urls]
+Homepage = "https://forgeo.org"
+Documentation = "https://forgeo.org"
+Repository = "https://github.com/lucaGazzola/forgeo"
+Issues = "https://github.com/lucaGazzola/forgeo/issues"
 
 [project.optional-dependencies]
 dev = [

@@ -22,8 +22,8 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 INSTALL_SH = REPO_ROOT / "install.sh"
-REPO_URL = "git+https://github.com/lucaGazzola/forgeo.git"
-VERSION = "0.2.1"
+PYPI_PACKAGE = "forgeo-cli"
+VERSION = "0.3.0"
 SH = shutil.which("sh")
 assert SH, "sh must be available to run install.sh"
 
@@ -264,7 +264,7 @@ def test_pipx_fallback_when_no_binary_for_platform(tmp_path):
     )
 
     assert result.returncode == 0, result.stderr
-    assert f"pipx install --force {REPO_URL}" in _calls(tmp_path)
+    assert f"pipx install --force {PYPI_PACKAGE}" in _calls(tmp_path)
     assert not any("python3 -m pip" in line for line in _calls(tmp_path))
     assert "forgeo init" in result.stdout
     assert "forgeo start" in result.stdout
@@ -279,7 +279,7 @@ def test_pipx_rerun_upgrades_instead_of_failing(tmp_path):
 
     assert first.returncode == 0, first.stderr
     assert second.returncode == 0, second.stderr
-    assert _calls(tmp_path).count(f"pipx install --force {REPO_URL}") == 2
+    assert _calls(tmp_path).count(f"pipx install --force {PYPI_PACKAGE}") == 2
 
 
 def test_pip_fallback_warns_when_user_bin_not_on_path(tmp_path):
@@ -290,7 +290,7 @@ def test_pip_fallback_warns_when_user_bin_not_on_path(tmp_path):
     )
 
     assert result.returncode == 0, result.stderr
-    assert f"python3 -m pip install --user --upgrade {REPO_URL}" in _calls(tmp_path)
+    assert f"python3 -m pip install --user --upgrade {PYPI_PACKAGE}" in _calls(tmp_path)
     assert "not on your PATH" in result.stderr
     assert "forgeo init" in result.stdout
 
@@ -307,7 +307,7 @@ def test_pip_fallback_silent_when_user_bin_on_path(tmp_path):
     )
 
     assert result.returncode == 0, result.stderr
-    assert f"python3 -m pip install --user --upgrade {REPO_URL}" in _calls(tmp_path)
+    assert f"python3 -m pip install --user --upgrade {PYPI_PACKAGE}" in _calls(tmp_path)
     assert "not on your PATH" not in result.stderr
 
 

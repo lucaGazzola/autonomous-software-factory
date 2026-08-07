@@ -14,11 +14,11 @@ set -eu
 
 REPO_OWNER="lucaGazzola"
 REPO_NAME="forgeo"
-VERSION="0.2.1"
+VERSION="0.3.0"
 MIN_PYTHON="3.11"
+PYPI_PACKAGE="forgeo-cli"
 
 BASE_URL="https://github.com/$REPO_OWNER/$REPO_NAME/releases/download/v$VERSION"
-REPO_URL="git+https://github.com/$REPO_OWNER/$REPO_NAME.git"
 PREFIX="${FORGEO_PREFIX:-${HOME:-}/.local}"
 BIN_DIR="$PREFIX/bin"
 
@@ -116,12 +116,12 @@ install_from_source() {
 
     if command -v pipx >/dev/null 2>&1; then
         log "Installing forgeo with pipx..."
-        pipx install --force "$REPO_URL"
+        pipx install --force "$PYPI_PACKAGE"
     else
         warn "pipx not found; falling back to 'pip install --user'."
         user_base="$("$PYTHON" -m site --user-base 2>/dev/null || printf '%s/.local' "${HOME:-}")"
         warn_path_not_on_path "$user_base/bin"
-        "$PYTHON" -m pip install --user --upgrade "$REPO_URL"
+        "$PYTHON" -m pip install --user --upgrade "$PYPI_PACKAGE"
     fi
 }
 

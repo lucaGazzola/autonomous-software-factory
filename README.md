@@ -29,8 +29,8 @@ genuinely yours to make — everything else happens autonomously.
 ## Quickstart
 
 Requires a git repository (no Python needed — the one-liner downloads a
-prebuilt binary for your OS). The full walkthrough is in
-[Getting started](docs/getting-started.md).
+prebuilt binary for your OS, or `pipx install forgeo-cli` works too). The full
+walkthrough is in [Getting started](docs/getting-started.md).
 
 ```bash
 # 1. Install

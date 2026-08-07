@@ -12,6 +12,12 @@ Install the `forgeo` CLI from the public GitHub remote with the one-liner
 curl -fsSL https://forgeo.org/install.sh | bash
 ```
 
+Or with Python 3.11+ via pip:
+
+```bash
+pipx install forgeo-cli
+```
+
 The installer:
 
 - downloads a prebuilt standalone binary from the matching GitHub Release
