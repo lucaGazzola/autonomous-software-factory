@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from forgeo.agent import BaseAgent
-from forgeo.backlog import JSONBacklog
+from forgeo.backlog import JSONBacklog, oldest_open_task
 from forgeo.git import GitError, GitManager
 from forgeo.models import (
     ExecutionResult,
@@ -122,7 +122,7 @@ class Forgeo:
             )
             return "blocked"
 
-        task = await self.backlog.fetch_next_task()
+        task = oldest_open_task(tasks)
         if task is not None:
             if not await self.git.a_is_clean():
                 logger.error(

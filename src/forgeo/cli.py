@@ -296,14 +296,17 @@ def _register_if_missing(
         )
 
 
-def _resolve_config(args: argparse.Namespace) -> ForgeoConfig | None:
+def _resolve_config(
+    args: argparse.Namespace, config_path: Path | None = None
+) -> ForgeoConfig | None:
     """Load the config, offering the guided setup when missing.
 
     Resolves ``--name`` through the instance registry. Applies the optional
     ``interval_minutes`` override. Returns ``None`` when no config can be
     produced.
     """
-    config_path = _resolved_config_path(args)
+    if config_path is None:
+        config_path = _resolved_config_path(args)
     if config_path is None:
         return None
     if not config_path.exists():
@@ -383,7 +386,7 @@ def _prepare_worker(
     config_path = _resolved_config_path(args)
     if config_path is None:
         return None
-    config = _resolve_config(args)
+    config = _resolve_config(args, config_path)
     if config is None:
         return None
     if register:
@@ -711,11 +714,11 @@ def cmd_instance_list(args: argparse.Namespace) -> int:
         )
         return 0
     table = Table(title="Forgeo instances")
+    # Fits any terminal width: three short columns, no long paths.
     for column in ("Name", "Daemon", "Last outcome"):
         table.add_column(column, overflow="fold")
     for info in infos:
         table.add_row(*_instance_row(info))
-    # Fits any terminal width: three short columns, no long paths.
     console.print(table)
     return 0
 

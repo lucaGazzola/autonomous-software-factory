@@ -91,7 +91,7 @@ def web_task_id_for(tasks: list[Task]) -> str:
     return f"WEB-{highest + 1:03d}"
 
 
-def _daemon_state(config: Any) -> dict[str, Any] | None:
+def _daemon_state(config: ForgeoConfig | None) -> dict[str, Any] | None:
     """The daemon's persisted live state, or ``None`` when unavailable.
 
     The daemon writes ``daemon.state.json`` (next to the backlog) after
@@ -110,7 +110,7 @@ def _daemon_state(config: Any) -> dict[str, Any] | None:
     return data
 
 
-def _read_tasks(config: Any) -> list[Task]:
+def _read_tasks(config: ForgeoConfig | None) -> list[Task]:
     """All tasks for ``config``, tolerating a missing or corrupt backlog.
 
     Reads the file directly so the dashboard never writes to an instance's
@@ -138,7 +138,7 @@ def _read_tasks(config: Any) -> list[Task]:
     return parsed
 
 
-def _blocker_content(config: Any) -> str | None:
+def _blocker_content(config: ForgeoConfig | None) -> str | None:
     """The ``BLOCKER.md`` contents, or ``None`` when absent or unreadable."""
     if config is None:
         return None
@@ -151,7 +151,7 @@ def _blocker_content(config: Any) -> str | None:
         return None
 
 
-def _last_outcome(config: Any) -> str | None:
+def _last_outcome(config: ForgeoConfig | None) -> str | None:
     """The most recent run's outcome string, or ``None``.
 
     Prefers the daemon's persisted state; falls back to ``runs.jsonl`` when
@@ -167,7 +167,7 @@ def _last_outcome(config: Any) -> str | None:
     return last_run.outcome.value if last_run is not None else None
 
 
-def _next_run(info: InstanceInfo, config: Any) -> str | None:
+def _next_run(info: InstanceInfo, config: ForgeoConfig | None) -> str | None:
     """The next scheduled run, when it can be derived.
 
     Prefers the daemon's persisted state (written every cycle). With no state
