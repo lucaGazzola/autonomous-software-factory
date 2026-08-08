@@ -74,7 +74,7 @@ Outcomes a cycle can produce:
 | --- | --- |
 | `task` | A task ran and finished. |
 | `refactor` | A refactoring pass ran (backlog was empty). |
-| `blocked` | A `BLOCKED` task exists; `BLOCKER.md` was rewritten; paused. |
+| `blocked` | A `BLOCKED` task exists; `BLOCKER.md` re-rendered from the backlog; paused. |
 | `paused` | A blocker file exists; nothing ran. |
 | `dirty` | The working tree was dirty; the task was not started. |
 | `skipped` | A previous run was still in progress (daemon only). |

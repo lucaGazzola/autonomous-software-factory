@@ -260,6 +260,8 @@ def test_instance_page_has_task_edit_modal(web_env):
     status, body = _get(f"http://127.0.0.1:{server.port}/instances/alpha/")
     assert status == 200
     assert 'id="task-modal-edit"' in body
+    assert 'id="task-modal-reopen"' in body
+    assert 'id="task-modal-blocker-section"' in body
     assert 'id="task-modal-delete"' in body
     assert 'id="task-modal-edit-form"' in body
     assert 'id="task-modal-save"' in body
@@ -715,7 +717,7 @@ def test_delete_task_non_open_400(web_env):
     url = f"http://127.0.0.1:{server.port}/api/instances/alpha/tasks/TASK-002"
     status, data = _delete(url)
     assert status == 400
-    assert data["error"] == "only OPEN tasks can be deleted"
+    assert data["error"] == "only OPEN or BLOCKED tasks can be deleted"
 
     status, tasks = _get(f"http://127.0.0.1:{server.port}/api/instances/alpha/tasks")
     assert status == 200
@@ -745,6 +747,179 @@ def test_delete_task_wrong_path_404(web_env):
     status, data = _delete(f"http://127.0.0.1:{server.port}/api/instances/alpha/bogus")
     assert status == 404
     assert data["error"] == "not found"
+
+
+def blocked_task_json(task_id: str = "TASK-003") -> dict:
+    return make_task(
+        id=task_id,
+        title="Blocked task",
+        status=TaskStatus.BLOCKED,
+        blocker_reason=["Which retry policy should I use?"],
+        blocked_count=2,
+    ).model_dump(mode="json")
+
+
+def test_task_json_exposes_blocker_fields(web_env, registry):
+    server, registry = web_env
+    write_instance(
+        registry,
+        "blocked",
+        repo=str(registry / "repos" / "blocked"),
+        tasks=[blocked_task_json("B-9")],
+    )
+    status, task = _get(
+        f"http://127.0.0.1:{server.port}/api/instances/blocked/tasks/B-9"
+    )
+    assert status == 200
+    assert task["status"] == "BLOCKED"
+    assert task["blocker_reason"] == ["Which retry policy should I use?"]
+    assert task["blocked_count"] == 2
+
+    status, tasks = _get(f"http://127.0.0.1:{server.port}/api/instances/blocked/tasks")
+    assert status == 200
+    assert tasks[0]["blocker_reason"] == ["Which retry policy should I use?"]
+    assert tasks[0]["blocked_count"] == 2
+
+
+def test_reopen_blocked_task(web_env, registry):
+    server, registry = web_env
+    write_instance(
+        registry,
+        "blocked",
+        repo=str(registry / "repos" / "blocked"),
+        tasks=[blocked_task_json("B-9")],
+    )
+    url = f"http://127.0.0.1:{server.port}/api/instances/blocked/tasks/B-9"
+    status, task = _post(f"{url}/reopen", None)
+    assert status == 200
+    assert task["status"] == "OPEN"
+    assert task["blocker_reason"] == []
+    assert task["blocked_count"] == 2  # kept as history
+
+    status, stored = _get(url)
+    assert status == 200
+    assert stored["status"] == "OPEN"
+    assert stored["blocker_reason"] == []
+    assert stored["blocked_count"] == 2
+
+    disk = json.loads(
+        (registry / "blocked" / "backlog.json").read_text(encoding="utf-8")
+    )
+    entry = disk["tasks"][0]
+    assert entry["status"] == "OPEN"
+    assert entry["blocker_reason"] == []
+    assert entry["blocked_count"] == 2
+
+
+def test_reopen_open_task_400(web_env):
+    server, _ = web_env
+    status, data = _post(
+        f"http://127.0.0.1:{server.port}/api/instances/alpha/tasks/TASK-001/reopen",
+        None,
+    )
+    assert status == 400
+    assert data["error"] == "only BLOCKED tasks can be reopened"
+
+    status, task = _get(
+        f"http://127.0.0.1:{server.port}/api/instances/alpha/tasks/TASK-001"
+    )
+    assert status == 200
+    assert task["status"] == "OPEN"
+
+
+def test_reopen_unknown_task_404(web_env):
+    server, _ = web_env
+    status, data = _post(
+        f"http://127.0.0.1:{server.port}/api/instances/alpha/tasks/MISSING/reopen",
+        None,
+    )
+    assert status == 404
+    assert data["error"] == "not found"
+
+
+def test_reopen_unknown_instance_404(web_env):
+    server, _ = web_env
+    status, data = _post(
+        f"http://127.0.0.1:{server.port}/api/instances/nope/tasks/TASK-001/reopen",
+        None,
+    )
+    assert status == 404
+    assert data["error"] == "unknown instance"
+
+
+def test_reopen_wrong_path_404(web_env):
+    server, _ = web_env
+    status, data = _post(
+        f"http://127.0.0.1:{server.port}/api/instances/alpha/bogus/reopen",
+        None,
+    )
+    assert status == 404
+    assert data["error"] == "not found"
+
+    status, data = _post(
+        f"http://127.0.0.1:{server.port}/api/instances/alpha/tasks/TASK-001/other",
+        None,
+    )
+    assert status == 404
+    assert data["error"] == "not found"
+
+
+def test_reopen_keeps_other_tasks(web_env, registry):
+    server, registry = web_env
+    write_instance(
+        registry,
+        "blocked",
+        repo=str(registry / "repos" / "blocked"),
+        tasks=[blocked_task_json("B-9"), task_json("B-10", "Other", TaskStatus.OPEN)],
+    )
+    status, _ = _post(
+        f"http://127.0.0.1:{server.port}/api/instances/blocked/tasks/B-9/reopen",
+        None,
+    )
+    assert status == 200
+    status, tasks = _get(
+        f"http://127.0.0.1:{server.port}/api/instances/blocked/tasks"
+    )
+    assert status == 200
+    assert [t["id"] for t in tasks] == ["B-9", "B-10"]
+    assert tasks[0]["status"] == "OPEN"
+
+
+def test_delete_blocked_task(web_env, registry):
+    server, registry = web_env
+    write_instance(
+        registry,
+        "blocked",
+        repo=str(registry / "repos" / "blocked"),
+        tasks=[blocked_task_json("B-9")],
+    )
+    url = f"http://127.0.0.1:{server.port}/api/instances/blocked/tasks/B-9"
+    status, data = _delete(url)
+    assert status == 200
+    assert data["id"] == "B-9"
+    assert data["status"] == "BLOCKED"
+
+    status, tasks = _get(f"http://127.0.0.1:{server.port}/api/instances/blocked/tasks")
+    assert status == 200
+    assert tasks == []
+
+
+def test_patch_rejects_engine_managed_blocker_fields(web_env):
+    server, _ = web_env
+    url = f"http://127.0.0.1:{server.port}/api/instances/alpha/tasks/TASK-001"
+    for payload in (
+        {"blocker_reason": ["I need a decision"]},
+        {"blocked_count": 5},
+        {"blocker_reason": ["x"], "blocked_count": 1},
+    ):
+        status, data = _patch(url, json.dumps(payload))
+        assert status == 400, payload
+        assert data["error"]
+
+    status, task = _get(url)
+    assert status == 200
+    assert task["blocker_reason"] == []
+    assert task["blocked_count"] == 0
 
 
 def test_do_delete_returns_500_on_unexpected_error(web_env, monkeypatch):
@@ -913,6 +1088,23 @@ def test_do_patch_returns_500_on_unexpected_error(web_env, monkeypatch):
     status, data = _patch(
         f"http://127.0.0.1:{server.port}/api/instances/alpha/tasks/TASK-001",
         json.dumps({"title": "x"}),
+    )
+    assert status == 500
+    assert data["error"] == "internal server error"
+
+
+def test_do_post_reopen_returns_500_on_unexpected_error(web_env, monkeypatch):
+    import forgeo.central as central_module
+
+    server, _ = web_env
+
+    def boom(name: str) -> None:
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(central_module, "get_instance", boom)
+    status, data = _post(
+        f"http://127.0.0.1:{server.port}/api/instances/alpha/tasks/TASK-001/reopen",
+        None,
     )
     assert status == 500
     assert data["error"] == "internal server error"

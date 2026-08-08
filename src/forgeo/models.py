@@ -101,7 +101,13 @@ class RunRecord(BaseModel):
 
 
 class Task(BaseModel):
-    """A unit of work Forgeo executes with the coding agent."""
+    """A unit of work Forgeo executes with the coding agent.
+
+    ``blocker_reason`` and ``blocked_count`` are engine-managed: they record
+    the last agent explanation when the task becomes ``BLOCKED`` and how many
+    times that happened, respectively. Neither is editable through the web
+    console's ``PATCH`` endpoint.
+    """
 
     id: str
     title: str
@@ -114,6 +120,8 @@ class Task(BaseModel):
     updated_at: datetime = Field(default_factory=_utcnow)
     agent_command: str | list[str] | None = Field(default=None)
     agent_timeout_seconds: float | None = Field(default=None, gt=0)
+    blocker_reason: list[str] = Field(default_factory=list)
+    blocked_count: int = Field(default=0, ge=0)
 
     @property
     def instruction(self) -> str:

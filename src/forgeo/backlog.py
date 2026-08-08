@@ -97,6 +97,46 @@ class JSONBacklog:
             await self._write(store)
         return updated
 
+    async def set_blocked(self, task_id: str, reason: list[str]) -> Task | None:
+        """Mark a task ``BLOCKED``, persisting the agent's blocker reason.
+
+        ``reason`` is stored on the task as ``blocker_reason`` (the source
+        ``BLOCKER.md`` is derived from) and ``blocked_count`` is incremented
+        every time a task transitions into ``BLOCKED``. An unknown ``task_id``
+        returns ``None`` without writing anything.
+        """
+        async with self._lock:
+            store = await self._read()
+            entry = self._entry_by_id(store, task_id)
+            if entry is None:
+                return None
+            entry["status"] = TaskStatus.BLOCKED.value
+            entry["blocker_reason"] = list(reason)
+            entry["blocked_count"] = int(entry.get("blocked_count", 0)) + 1
+            entry["updated_at"] = datetime.now(UTC).isoformat()
+            updated = self._to_task(entry)
+            await self._write(store)
+        return updated
+
+    async def reopen_task(self, task_id: str) -> Task | None:
+        """Reopen a blocked task: status back to ``OPEN``, reason cleared.
+
+        ``blocked_count`` is kept as history (the human should see how often
+        the task blocked before deciding to retry, split, or drop it). An
+        unknown ``task_id`` returns ``None`` without writing anything.
+        """
+        async with self._lock:
+            store = await self._read()
+            entry = self._entry_by_id(store, task_id)
+            if entry is None:
+                return None
+            entry["status"] = TaskStatus.OPEN.value
+            entry["blocker_reason"] = []
+            entry["updated_at"] = datetime.now(UTC).isoformat()
+            updated = self._to_task(entry)
+            await self._write(store)
+        return updated
+
     async def delete_task(self, task_id: str) -> Task | None:
         """Remove a task from the backlog, returning the deleted task.
 

@@ -19,11 +19,13 @@ Routes:
   per-instance API.
 * ``POST /api/instances/<name>/tasks`` — add a new task to that instance's
   backlog.
+* ``POST /api/instances/<name>/tasks/<id>/reopen`` — reopen a ``BLOCKED``
+  task (status back to ``OPEN``, blocker reason cleared).
 * ``PATCH /api/instances/<name>/tasks/<id>`` — update an existing task's
   editable fields (title, description, acceptance criteria, dependencies,
   files to modify, agent command, agent timeout).
-* ``DELETE /api/instances/<name>/tasks/<id>`` — delete an ``OPEN`` task from
-  that instance's backlog.
+* ``DELETE /api/instances/<name>/tasks/<id>`` — delete an ``OPEN`` or
+  ``BLOCKED`` task from that instance's backlog.
 
 An unknown instance name returns ``404``; a registered instance with missing
 data files renders with empty data and ``daemon_running=false`` rather than
@@ -321,7 +323,7 @@ def make_handler() -> type[BaseHTTPRequestHandler]:
             path = parsed.path
 
             if path.startswith("/api/instances/"):
-                self._post_instance_task(path)
+                self._post_instance_api(path)
                 return
             self._send_json(404, {"error": "not found"})
 
@@ -399,6 +401,20 @@ def make_handler() -> type[BaseHTTPRequestHandler]:
                 return None
             task_id = unquote(parts[2]) if with_task_id else None
             return info.config, task_id
+
+        def _post_instance_api(self, path: str) -> None:
+            """Route a POST under ``/api/instances/`` to its handler."""
+            parts = path[len("/api/instances/") :].split("/")
+            if len(parts) < 2 or parts[1] != "tasks":
+                self._send_json(404, {"error": "not found"})
+                return
+            if len(parts) == 2:
+                self._post_instance_task(path)
+                return
+            if len(parts) == 4 and parts[3] == "reopen":
+                self._reopen_instance_task(path)
+                return
+            self._send_json(404, {"error": "not found"})
 
         def _post_instance_task(self, path: str) -> None:
             """Create a task in an instance's backlog from a JSON body."""
@@ -478,8 +494,43 @@ def make_handler() -> type[BaseHTTPRequestHandler]:
                 return
             self._send_json(200, updated.model_dump(mode="json"))
 
+        def _reopen_instance_task(self, path: str) -> None:
+            """Reopen a BLOCKED task: status back to OPEN, reason cleared.
+
+            A dedicated endpoint rather than a generic ``status`` via PATCH,
+            so the status transition stays outside the editable-fields model.
+            """
+            parts = path[len("/api/instances/") :].split("/")
+            if len(parts) != 4 or parts[1] != "tasks" or parts[3] != "reopen":
+                self._send_json(404, {"error": "not found"})
+                return
+            name = unquote(parts[0])
+            info = get_instance(name)
+            if info is None:
+                self._send_json(404, {"error": "unknown instance"})
+                return
+            if info.config is None:
+                self._send_json(500, {"error": "instance config not available"})
+                return
+            task_id = unquote(parts[2])
+
+            backlog = JSONBacklog(info.config.backlog)
+            task = asyncio.run(backlog.get_task(task_id))
+            if task is None:
+                self._send_json(404, {"error": "not found"})
+                return
+            if task.status is not TaskStatus.BLOCKED:
+                self._send_json(
+                    400,
+                    {"error": "only BLOCKED tasks can be reopened"},
+                )
+                return
+            reopened = asyncio.run(backlog.reopen_task(task_id))
+            assert reopened is not None  # task was just found in the backlog
+            self._send_json(200, reopened.model_dump(mode="json"))
+
         def _delete_instance_task(self, path: str) -> None:
-            """Delete an OPEN task from an instance's backlog."""
+            """Delete an OPEN or BLOCKED task from an instance's backlog."""
             target = self._resolve_task_target(path, with_task_id=True)
             if target is None:
                 return
@@ -491,10 +542,10 @@ def make_handler() -> type[BaseHTTPRequestHandler]:
             if task is None:
                 self._send_json(404, {"error": "not found"})
                 return
-            if task.status is not TaskStatus.OPEN:
+            if task.status not in (TaskStatus.OPEN, TaskStatus.BLOCKED):
                 self._send_json(
                     400,
-                    {"error": "only OPEN tasks can be deleted"},
+                    {"error": "only OPEN or BLOCKED tasks can be deleted"},
                 )
                 return
             deleted = asyncio.run(backlog.delete_task(task_id))

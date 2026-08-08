@@ -2,17 +2,20 @@
 
 Each run does exactly one of three things:
 
-1. A ``BLOCKED`` task exists -> write the blocker file (the detailed
-   explanation of what the human must do) and pause.
+1. A ``BLOCKED`` task exists -> render the blocker file (the detailed
+   explanation of what the human must do) from the backlog and pause.
 2. An ``OPEN`` task exists -> execute it with the agent, commit and push the
    result on the main branch.
 3. The backlog has nothing runnable -> run the agent in refactoring mode on
    the same branch, committing and pushing whatever it improves.
 
 Whenever the agent signals BLOCKED, its partial work is committed and pushed
-(no branches, nothing lost) and a ``BLOCKER.md`` file is written outside the
-repository with exactly what the human needs to do. Forgeo stays paused
-while that file exists.
+(no branches, nothing lost) and the task records the agent's reason in
+``blocker_reason``. The ``BLOCKER.md`` file is a derived view of the backlog's
+``BLOCKED`` tasks, re-rendered every cycle with the real per-task reasons; it
+disappears automatically once the last ``BLOCKED`` task is resolved. A
+refactoring block (which has no task to carry the reason) is the exception: it
+writes the file once and keeps Forgeo paused until the file is deleted.
 """
 
 from __future__ import annotations
@@ -39,6 +42,10 @@ from forgeo.notify import BlockedNotice, send_blocked_notice
 from forgeo.runs import RunRecorder, runs_path_for
 
 logger = logging.getLogger(__name__)
+
+#: Marker embedded in the task-derived ``BLOCKER.md`` so the daemon can tell
+#: the derived view apart from a refactor-block or stale file on later cycles.
+_TASK_BLOCKER_MARKER = "<!-- forgeo:task-blocker:derived -->"
 
 
 def _execution_outcome(status: ExecutionStatus) -> RunOutcome:
@@ -107,20 +114,12 @@ class Forgeo:
         blocked = [t for t in tasks if t.status is TaskStatus.BLOCKED]
         if blocked:
             self._blocked_tasks = blocked
-            await self._write_blocker(
-                [
-                    BlockerEntry(
-                        task=task,
-                        result=ExecutionResult(
-                            status=ExecutionStatus.BLOCKED,
-                            questions=[f"Task {task.id} is blocked; see the backlog."],
-                        ),
-                        instruction=task.instruction,
-                    )
-                    for task in blocked
-                ]
-            )
+            await self._render_blocker(blocked)
             return "blocked"
+
+        if self._is_derived_blocker():
+            logger.info("No BLOCKED tasks remain; removing derived blocker file.")
+            self.config.blocker_file.unlink(missing_ok=True)
 
         task = oldest_open_task(tasks)
         if task is not None:
@@ -213,7 +212,8 @@ class Forgeo:
         )
 
         if result.status is ExecutionStatus.BLOCKED:
-            await self.backlog.update_status(task.id, TaskStatus.BLOCKED)
+            reason = result.questions or result.output_logs
+            await self.backlog.set_blocked(task.id, reason)
         if result.status is ExecutionStatus.SUCCESS and ok:
             await self.backlog.update_status(task.id, TaskStatus.COMPLETED)
             self.config.blocker_file.unlink(missing_ok=True)
@@ -290,12 +290,13 @@ class Forgeo:
                     instruction=instruction,
                     is_refactor=is_refactor,
                 )
-                await self._write_blocker([entry])
+                if is_refactor:
+                    await self._write_blocker([entry])
                 self._notify_blocked(entry)
-            logger.warning(
-                "%s is BLOCKED; blocker file written.",
-                _subject_label(task, is_refactor=is_refactor),
-            )
+            if is_refactor:
+                logger.warning("Refactoring pass is BLOCKED; blocker file written.")
+            else:
+                logger.warning("Task %s is BLOCKED; see BLOCKER.md on the next cycle.", task.id)
             return False
 
         await self._discard_failed_work(task, result, is_refactor=is_refactor)
@@ -389,8 +390,68 @@ class Forgeo:
         )
         send_blocked_notice(self.config, notice)
 
+    async def _render_blocker(self, blocked: list[Task]) -> None:
+        """Render ``BLOCKER.md`` as a derived view of the backlog's BLOCKED tasks.
+
+        Re-rendered every cycle while any task is blocked, so it always shows
+        the real per-task reasons from ``blocker_reason`` (never generic
+        text). Once the last BLOCKED task is resolved, :meth:`_run_cycle`
+        removes the file because it carries the derived-view marker.
+        """
+        sections: list[str] = [
+            "# BLOCKER: Forgeo needs your input",
+            "",
+            _TASK_BLOCKER_MARKER,
+            "",
+            "The coding agent could not finish without a human decision. The",
+            f"forgeo is paused until this is resolved. Backlog: `{self.config.backlog}`.",
+            "",
+        ]
+        for task in blocked:
+            sections.append(self._render_blocked_task(task))
+            sections.append("")
+        self.config.blocker_file.parent.mkdir(parents=True, exist_ok=True)
+        self.config.blocker_file.write_text("\n".join(sections), encoding="utf-8")
+        logger.info(
+            "Blocker file rendered from %d BLOCKED task(s) to %s",
+            len(blocked),
+            self.config.blocker_file,
+        )
+
+    def _render_blocked_task(self, task: Task) -> str:
+        """Render the explanation and required human action for one blocked task."""
+        sections = [self._render_reason_sections(task, task.instruction, task.blocker_reason)]
+        sections += [
+            "",
+            "### What you must do",
+            "",
+            "1. Decide what the agent needs (edit the repository directly if required).",
+            "2. Reopen the task from the web console so Forgeo retries it on the next",
+            f"   scheduled run, or set the status of `{task.id}` back to `OPEN` directly",
+            f"   in `{self.config.backlog}`.",
+            "3. Or delete the task from the web console if it should not be done.",
+        ]
+        return "\n".join(sections)
+
+    def _is_derived_blocker(self) -> bool:
+        """True when the blocker file is a task-derived view (not a stale or
+        refactor-block file), i.e. it carries the derived-view marker."""
+        path = self.config.blocker_file
+        if not path.is_file():
+            return False
+        try:
+            content = path.read_text(encoding="utf-8")
+        except OSError:
+            return False
+        return _TASK_BLOCKER_MARKER in content
+
     async def _write_blocker(self, entries: list[BlockerEntry]) -> None:
-        """Write the blocker file with a detailed explanation of every block."""
+        """Write the blocker file for a refactoring block (no backlog task).
+
+        A refactor block has no task to carry the reason, so it stays outside
+        the derived-view model: the file is written once at block time and
+        Forgeo stays paused until the human deletes it.
+        """
         sections: list[str] = [
             "# BLOCKER: Forgeo needs your input",
             "",
@@ -406,31 +467,27 @@ class Forgeo:
         logger.info("Blocker file written to %s", self.config.blocker_file)
 
     def _render_entry(self, entry: BlockerEntry) -> str:
-        """Render the explanation and the required human action for one block."""
-        task = entry.task
+        """Render the explanation and required human action for one refactor block."""
+        reason = entry.result.questions or entry.result.output_logs
+        sections = [self._render_reason_sections(entry.task, entry.instruction, reason)]
+        sections += [
+            "",
+            "### What you must do",
+            "",
+            "Decide how to handle this refactoring question, then delete this file.",
+            "Forgeo will continue on the next scheduled run.",
+        ]
+        return "\n".join(sections)
+
+    @staticmethod
+    def _render_reason_sections(
+        task: Task, instruction: str, reason: list[str]
+    ) -> str:
+        """Render the shared "asked to do" + "says it needs" sections for one block."""
         lines = [f"## {task.id}: {task.title}", "", "### What the agent was asked to do", ""]
-        lines += [f"> {line}" for line in entry.instruction.splitlines()]
+        lines += [f"> {line}" for line in instruction.splitlines()]
         lines += ["", "### What the agent says it needs", ""]
-        questions = entry.result.questions or entry.result.output_logs
-        if not questions:
-            questions = ["The agent did not explain what it needs."]
-        lines += [f"> {line}" for line in questions[-10:]]
-        if entry.is_refactor:
-            lines += [
-                "",
-                "### What you must do",
-                "",
-                "Decide how to handle this refactoring question, then delete this file.",
-                "Forgeo will continue on the next scheduled run.",
-            ]
-        else:
-            lines += [
-                "",
-                "### What you must do",
-                "",
-                "1. Decide what the agent needs (edit the repository directly if required).",
-                f"2. Open `{self.config.backlog}` and set the status of `{task.id}` back to `OPEN`",
-                "   so Forgeo retries it — or delete the task if it should not be done.",
-                "3. Forgeo will retry on the next scheduled run.",
-            ]
+        if not reason:
+            reason = ["The agent did not explain what it needs."]
+        lines += [f"> {line}" for line in reason[-10:]]
         return "\n".join(lines)

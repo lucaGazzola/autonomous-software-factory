@@ -269,6 +269,20 @@
     if (node) node.hidden = !show;
   }
 
+  function isOpenOrBlocked(status) {
+    return status === "OPEN" || status === "BLOCKED";
+  }
+
+  function updateModalActions() {
+    if (!modalTask) return;
+    var status = (modalTask.status || "OPEN").toUpperCase();
+    showModalSection("task-modal-edit", isOpenOrBlocked(status));
+    var deleteBtn = document.getElementById("task-modal-delete");
+    if (deleteBtn) deleteBtn.hidden = !isOpenOrBlocked(status);
+    var reopenBtn = document.getElementById("task-modal-reopen");
+    if (reopenBtn) reopenBtn.hidden = status !== "BLOCKED";
+  }
+
   function renderModal(task) {
     if (!task) return;
     modalTask = task;
@@ -281,11 +295,21 @@
       badge.className = "badge badge--" + status;
     }
 
-    showModalSection("task-modal-edit", (task.status || "OPEN") === "OPEN");
+    var status = (task.status || "OPEN").toUpperCase();
+    updateModalActions();
 
-    var deleteBtn = document.getElementById("task-modal-delete");
-    if (deleteBtn) {
-      deleteBtn.hidden = (task.status || "OPEN") !== "OPEN";
+    var blocked = status === "BLOCKED";
+    showModalSection("task-modal-blocker-section", blocked);
+    if (blocked) {
+      var count = document.getElementById("task-modal-blocked-count");
+      if (count) count.textContent = "blocked " + (task.blocked_count || 0) + "x";
+      var reason = document.getElementById("task-modal-blocker-reason");
+      if (reason) {
+        var lines = task.blocker_reason || [];
+        reason.textContent = lines.length
+          ? lines.join("\n")
+          : "The agent did not explain what it needs.";
+      }
     }
 
     setText("task-modal-description", task.description || "");
@@ -369,6 +393,8 @@
     showModalSection("task-modal-edit", false);
     var deleteBtn = document.getElementById("task-modal-delete");
     if (deleteBtn) deleteBtn.hidden = true;
+    var reopenBtn = document.getElementById("task-modal-reopen");
+    if (reopenBtn) reopenBtn.hidden = true;
     var error = document.getElementById("task-modal-error");
     if (error) error.hidden = true;
   }
@@ -376,11 +402,7 @@
   function exitEditMode() {
     showModalSection("task-modal-view", true);
     showModalSection("task-modal-edit-form", false);
-    showModalSection("task-modal-edit", true);
-    var deleteBtn = document.getElementById("task-modal-delete");
-    if (deleteBtn && modalTask) {
-      deleteBtn.hidden = (modalTask.status || "OPEN") !== "OPEN";
-    }
+    updateModalActions();
     var error = document.getElementById("task-modal-error");
     if (error) error.hidden = true;
   }
@@ -457,7 +479,7 @@
 
   function deleteTask() {
     if (!API || !modalTaskId) return;
-    if (!window.confirm("Delete this OPEN task? This cannot be undone.")) return;
+    if (!window.confirm("Delete this task? This cannot be undone.")) return;
     var error = document.getElementById("task-modal-delete-error");
     if (error) error.hidden = true;
 
@@ -484,6 +506,43 @@
           error.textContent = err.message || "failed to delete task";
           error.hidden = false;
         }
+      });
+  }
+
+  function reopenTask() {
+    if (!API || !modalTaskId) return;
+    var error = document.getElementById("task-modal-error");
+    if (error) error.hidden = true;
+    var reopenBtn = document.getElementById("task-modal-reopen");
+    if (reopenBtn) reopenBtn.disabled = true;
+
+    fetch(API + "tasks/" + encodeURIComponent(modalTaskId) + "/reopen", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    })
+      .then(function (resp) {
+        if (!resp.ok) {
+          return resp.json().then(function (data) {
+            throw new Error((data && data.error) || "HTTP " + resp.status);
+          });
+        }
+        return resp.json();
+      })
+      .then(function (task) {
+        renderModal(task);
+        return fetchJSON(API + "tasks");
+      })
+      .then(function (tasks) {
+        renderTasks(tasks || []);
+      })
+      .catch(function (err) {
+        if (error) {
+          error.textContent = err.message || "failed to reopen task";
+          error.hidden = false;
+        }
+      })
+      .finally(function () {
+        if (reopenBtn) reopenBtn.disabled = false;
       });
   }
 
@@ -782,6 +841,8 @@
       if (closeBtn) closeBtn.addEventListener("click", closeModal);
       var editBtn = document.getElementById("task-modal-edit");
       if (editBtn) editBtn.addEventListener("click", enterEditMode);
+      var reopenBtn = document.getElementById("task-modal-reopen");
+      if (reopenBtn) reopenBtn.addEventListener("click", reopenTask);
       var deleteBtn = document.getElementById("task-modal-delete");
       if (deleteBtn) deleteBtn.addEventListener("click", deleteTask);
       var cancelBtn = document.getElementById("task-modal-cancel");

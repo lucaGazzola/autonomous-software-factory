@@ -8,8 +8,10 @@ A **scheduled, agent-driven software forgeo** for one repository. Every
    directly on the single configured branch — no branches, no PRs;
 2. if the backlog is empty, runs the agent in **refactoring mode** and commits
    whatever it improves;
-3. if the agent signals it needs a human decision, writes a `BLOCKER.md` with
-   what you must do, and pauses until you resolve it.
+3. if the agent signals it needs a human decision, the task is marked
+   `BLOCKED` with the agent's reason preserved, `BLOCKER.md` is rendered from
+   the backlog's blocked tasks, and Forgeo pauses until you resolve it (reopen
+   it from the web console).
 
 ## What Forgeo is
 
@@ -37,7 +39,7 @@ forgeo.yaml ──► forgeo start (daemon)
                      ▼
                  Forgeo.run_cycle()
                      │
-                     ├── BLOCKED task exists ──► write BLOCKER.md, pause
+                     ├── BLOCKED task exists ──► render BLOCKER.md from backlog, pause
                      │
                      ├── oldest OPEN task ──► run agent ──► commit & push ──► COMPLETED
                      │
@@ -45,7 +47,8 @@ forgeo.yaml ──► forgeo start (daemon)
                                                 │
             exit 0                              │            exit blocked_exit_code
         commit & push ──────── ShellAgent ──────┴─────► partial work committed,
-            task COMPLETED   (FORGEO_TASK env)          BLOCKER.md written,
+            task COMPLETED   (FORGEO_TASK env)          reason persisted on task,
+                                                         BLOCKER.md rendered next cycle
                                                          task BLOCKED
 ```
 
@@ -71,9 +74,11 @@ forgeo.yaml ──► forgeo start (daemon)
    `once` is refused while it is held.
 2. `Forgeo.run_cycle()` ensures the configured branch exists and is checked
    out.
-3. If any task is `BLOCKED`, Forgeo rewrites `BLOCKER.md` and pauses
-   (`blocked` outcome) — it will not start new work until the human resolves
-   the block.
+3. If any task is `BLOCKED`, Forgeo re-renders `BLOCKER.md` from the backlog
+   (real per-task reasons, never generic text) and pauses (`blocked` outcome)
+   — it will not start new work until the block is resolved. Once the last
+   `BLOCKED` task is reopened, the file disappears automatically on the next
+   cycle.
 4. Otherwise it takes the oldest `OPEN` task. If the working tree is dirty the
    cycle aborts (`dirty`) rather than running over manual changes.
 5. The agent runs with the repository as its working directory and the task in

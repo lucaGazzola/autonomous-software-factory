@@ -255,6 +255,35 @@
 
 /* ---------- Task detail modal: edit mode ---------- */
 
+.modal__blocker {
+  border-left: 3px solid var(--blocked);
+  background: rgba(240, 168, 77, 0.07);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+}
+
+.modal__blocked-count {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--blocked);
+}
+
+.modal__blocked-note {
+  margin: 10px 0 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+.modal__blocked-note code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  color: var(--text);
+}
+
 #task-modal-view {
   display: flex;
   flex-direction: column;

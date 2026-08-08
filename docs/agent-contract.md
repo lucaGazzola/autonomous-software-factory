@@ -39,7 +39,7 @@ The exit code decides the outcome of the run:
 | Exit code | Outcome | What happens |
 | --- | --- | --- |
 | `0` | **SUCCESS** | Everything is committed (`git add -A && git commit`) with the message `forgeo: <title> (#<id>)`, pushed when a remote is set, and the task is marked `COMPLETED`. |
-| `blocked_exit_code` (default `2`) | **BLOCKED** | The agent needs a human decision. Partial work is committed as `forgeo: <title> (#<id>) [partial]`, `BLOCKER.md` is written explaining what you must do, an optional Telegram notification is sent, and the task is marked `BLOCKED`. |
+| `blocked_exit_code` (default `2`) | **BLOCKED** | The agent needs a human decision. Partial work is committed as `forgeo: <title> (#<id>) [partial]`, the agent's reason is persisted on the task (`blocker_reason`), an optional Telegram notification is sent, and the task is marked `BLOCKED`. `BLOCKER.md` is rendered from the backlog's `BLOCKED` tasks on the next cycle — real per-task reasons, never generic text — and disappears once the last one is resolved (reopen it from the web console). |
 | anything else | **ERROR** | Changes are discarded (`git reset --hard` + `git clean -fd`), the failure is logged, and the task is marked `FAILED`. |
 
 The blocked exit code is configurable via `blocked_exit_code` in
@@ -72,8 +72,9 @@ interrupted.
 The agent's stdout and stderr are captured live, prefixed with `[stdout]` /
 `[stderr]`, and retained in the run result. To keep memory bounded, only the
 **last 1000 lines** are kept for a chatty agent. On a BLOCKED result, the
-captured output lines are used as the "what the agent needs" section of
-`BLOCKER.md` (up to the last 10 lines).
+agent's questions (falling back to the captured output lines) are stored on
+the task as `blocker_reason` and become the "what the agent needs" section of
+`BLOCKER.md` (up to the last 10 lines), rendered on the next cycle.
 
 ## Git contract
 

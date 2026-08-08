@@ -36,7 +36,13 @@ static files in `src/forgeo/web/` are served at their URL paths.
   modify, agent command, timestamps); it closes via the close button, the
   backdrop, or Escape. An **Edit** button switches the modal to an editable
   form for those fields; **Save** persists the change via `PATCH` and
-  **Cancel** discards it.
+  **Cancel** discards it. A `BLOCKED` task's modal additionally shows the
+  agent's blocker reason (the persisted per-task `blocker_reason`) and how
+  many times the task has blocked (`blocked_count`, e.g. "blocked 3x"): you
+  can **Edit** the task to correct it and then **Reopen** it, or **Reopen**
+  it as-is — Forgeo retries it on its next scheduled run. `BLOCKED` tasks can
+  also be **Deleted** (with confirmation), mirroring the `BLOCKER.md`
+  instructions.
 - `GET /style.css`, `/central/central.js`, `/central/central.css` — the
   shared dark theme and dashboard scripts (no frameworks).
 
@@ -70,6 +76,8 @@ curl http://127.0.0.1:8790/api/instances/my-repo/tasks
     "title": "Implement fibonacci module",
     "description": "Write a fibonacci module with memoization and tests.",
     "status": "OPEN",
+    "blocker_reason": [],
+    "blocked_count": 0,
     "created_at": "2026-07-31T10:00:00Z",
     "updated_at": "2026-07-31T10:00:00Z",
     "dependencies": [],
@@ -130,15 +138,56 @@ Errors:
 - `409` with `{"error": "..."}` — the generated id already exists in the
   backlog (e.g. two concurrent requests raced).
 
+### `POST /api/instances/<name>/tasks/{id}/reopen`
+
+Reopen a `BLOCKED` task so Forgeo retries it on its next scheduled run: its
+status is set back to `OPEN`, `blocker_reason` is cleared, and `blocked_count`
+is kept as history. No request body is required. A dedicated endpoint rather
+than a generic `status` via `PATCH` — status transitions stay outside the
+editable-fields model.
+
+```bash
+curl -X POST http://127.0.0.1:8790/api/instances/my-repo/tasks/TASK-001/reopen
+```
+
+```json
+{
+  "id": "TASK-001",
+  "title": "Implement fibonacci module",
+  "description": "Write a fibonacci module with memoization and tests.",
+  "status": "OPEN",
+  "blocker_reason": [],
+  "blocked_count": 1,
+  "created_at": "2026-07-31T10:00:00Z",
+  "updated_at": "2026-08-01T12:00:00Z",
+  "dependencies": [],
+  "acceptance_criteria": [],
+  "files_to_modify": []
+}
+```
+
+Returns `200` with the reopened task. The write is atomic (temp file +
+rename), so it is safe even while that instance's daemon is mid-cycle. Once
+the last `BLOCKED` task is resolved, the derived `BLOCKER.md` disappears on
+the next cycle automatically. Errors:
+
+- `400` with `{"error": "only BLOCKED tasks can be reopened"}` — the task
+  exists but is not `BLOCKED` (it is untouched).
+- `404` with `{"error": "not found"}` — the task id does not exist in that
+  instance's backlog.
+- `404` with `{"error": "unknown instance"}` — the instance is not
+  registered.
+
 ### `PATCH /api/instances/<name>/tasks/{id}`
 
 Update an existing task's editable fields: `title`, `description`,
 `acceptance_criteria`, `dependencies`, `files_to_modify`, `agent_command`,
 and `agent_timeout_seconds`. The request body is a JSON object; omitted fields
-are left unchanged and `id`, `status`, and `created_at` are always preserved.
-`agent_command` may be a string, an array, or `null` (clear the per-task
-override); `agent_timeout_seconds` may be a positive number or `null`.
-`updated_at` is bumped to the current time.
+are left unchanged and `id`, `status`, `blocker_reason`, `blocked_count`, and
+`created_at` are always preserved (they are engine-managed — `PATCH` rejects
+them like it rejects `status`). `agent_command` may be a string, an array, or
+`null` (clear the per-task override); `agent_timeout_seconds` may be a
+positive number or `null`. `updated_at` is bumped to the current time.
 
 ```bash
 curl -X PATCH http://127.0.0.1:8790/api/instances/my-repo/tasks/TASK-001 \
@@ -165,8 +214,9 @@ rename), so it is safe even while that instance's daemon is mid-cycle.
 Errors:
 
 - `400` with `{"error": "..."}` — unparseable or non-object body, an empty
-  body, an unknown field (e.g. `status`), or an invalid value (blank `title`,
-  wrong field types, a non-positive `agent_timeout_seconds`).
+  body, an unknown field (e.g. `status`, `blocker_reason`, `blocked_count`),
+  or an invalid value (blank `title`, wrong field types, a non-positive
+  `agent_timeout_seconds`).
 - `404` with `{"error": "not found"}` — the task id does not exist in that
   instance's backlog.
 - `404` with `{"error": "unknown instance"}` — the instance is not
@@ -174,9 +224,10 @@ Errors:
 
 ### `DELETE /api/instances/<name>/tasks/{id}`
 
-Delete an `OPEN` task from that instance's backlog (e.g. a task added by
-mistake). Only `OPEN` tasks can be deleted — a task that was already picked
-up stays in the record.
+Delete an `OPEN` or `BLOCKED` task from that instance's backlog (e.g. a task
+added by mistake, or a `BLOCKED` task the human decides should not be done —
+per the `BLOCKER.md` instructions). `COMPLETED` and `FAILED` tasks stay in the
+record.
 
 ```bash
 curl -X DELETE http://127.0.0.1:8790/api/instances/my-repo/tasks/TASK-001
@@ -186,8 +237,8 @@ Returns `200` with the deleted task. The write is atomic (temp file +
 rename), so it is safe even while that instance's daemon is mid-cycle.
 Errors:
 
-- `400` with `{"error": "only OPEN tasks can be deleted"}` — the task exists
-  but is not `OPEN` (it is untouched).
+- `400` with `{"error": "only OPEN or BLOCKED tasks can be deleted"}` — the
+  task exists but is `COMPLETED` or `FAILED` (it is untouched).
 - `404` with `{"error": "not found"}` — the task id does not exist in that
   instance's backlog.
 - `404` with `{"error": "unknown instance"}` — the instance is not
@@ -267,14 +318,16 @@ curl http://127.0.0.1:8790/api/instances/my-repo/blocker
   `daemon_running=false` instead of erroring — the instance page and every
   API endpoint still return `200`.
 - The write endpoints are `POST /api/instances/<name>/tasks` (append a task),
+  `POST /api/instances/<name>/tasks/<id>/reopen` (reopen a `BLOCKED` task),
   `PATCH /api/instances/<name>/tasks/<id>` (update a task's editable fields),
-  and `DELETE /api/instances/<name>/tasks/<id>` (delete an `OPEN` task).
+  and `DELETE /api/instances/<name>/tasks/<id>` (delete an `OPEN` or
+  `BLOCKED` task).
 
 ## Errors
 
 - `400` — malformed `POST`/`PATCH` body (missing/blank title, unparseable
-  body, wrong field types, unknown fields), or `DELETE` of a task that is
-  not `OPEN`.
+  body, wrong field types, unknown fields), a `POST reopen` of a task that is
+  not `BLOCKED`, or `DELETE` of a task that is neither `OPEN` nor `BLOCKED`.
 - `404` — unknown API path, unknown instance, unknown task, or missing
   static file.
 - `409` — `POST` id collision (a concurrent request won the race).
@@ -293,7 +346,8 @@ curl -s http://127.0.0.1:8790/api/instances/my-repo/status
   interface) makes every instance's backlog, logs, and config visible to
   every host that can reach the port — only do that on a trusted network.
 - The write endpoints are `POST /api/instances/<name>/tasks` and `PATCH
-  /api/instances/<name>/tasks/<id>` (and `DELETE
-  /api/instances/<name>/tasks/<id>` for open tasks). A machine that can reach
-  the port can add tasks to any instance's queue, edit their fields, and
-  delete open ones.
+  /api/instances/<name>/tasks/<id>` (and `POST
+  /api/instances/<name>/tasks/<id>/reopen` to retry a `BLOCKED` task, plus
+  `DELETE /api/instances/<name>/tasks/<id>` for open or blocked tasks). A
+  machine that can reach the port can add tasks to any instance's queue, edit
+  their fields, retry blocked ones, and delete open or blocked ones.

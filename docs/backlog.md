@@ -37,6 +37,8 @@ Each entry in `tasks` is a task object:
 | `files_to_modify` | list[string] | `[]` | Informational; hints for the agent. |
 | `agent_command` | string / list[string] | — | Override the configured `agent_command` for this task (e.g. route it to a different model). Validated like the global key; falls back to the config default when omitted. |
 | `agent_timeout_seconds` | number | — | Override the configured `agent_timeout_seconds` for this task (must be positive). Falls back to the config default when omitted. |
+| `blocker_reason` | list[string] | `[]` | Engine-managed: the agent's explanation (its questions, falling back to captured output) when the task becomes `BLOCKED`. Cleared on reopen; not editable via `PATCH`. |
+| `blocked_count` | integer | `0` | Engine-managed: how many times the task has transitioned into `BLOCKED`. Kept as history when the task is reopened, so you can see a task that keeps blocking needs splitting or rewriting rather than a blind retry. Not editable via `PATCH`. |
 
 Only `id`, `title`, `description`, and `status` (optionally) are required;
 every other field is optional.
@@ -81,9 +83,26 @@ You add, remove, or reopen tasks by editing the file directly — or use the
 /api/instances/<name>/tasks`) assigns the next free `WEB-###` id for you, and
 the task detail modal's **Edit** button updates an existing task's fields
 (`PATCH /api/instances/<name>/tasks/<id>`), while its **Delete** button
-removes an `OPEN` task (`DELETE /api/instances/<name>/tasks/<id>`). To retry
-a `BLOCKED` task, set its status back to `OPEN` — Forgeo picks it up on the
-next scheduled run.
+removes an `OPEN` or `BLOCKED` task (`DELETE /api/instances/<name>/tasks/<id>`).
+
+### Resolving a blocked task
+
+When the agent signals BLOCKED, Forgeo commits its partial work as a
+`[partial]` commit on `main` and marks the task `BLOCKED`, recording the
+agent's reason in `blocker_reason`. `BLOCKER.md` is a *derived view* of the
+backlog's `BLOCKED` tasks — it is re-rendered every cycle with the real
+per-task reasons and disappears automatically once the last `BLOCKED` task is
+resolved.
+
+To retry a `BLOCKED` task, **reopen** it: in the web console, open the task
+card and press **Reopen** (edit the task first if you want to correct
+something — editing is optional). Reopen is also available as `POST
+/api/instances/<name>/tasks/<id>/reopen`; either way the status goes back to
+`OPEN`, `blocker_reason` is cleared, and `blocked_count` is kept. Forgeo
+picks the task up on the next scheduled run, building on the preserved
+partial work. Reopening by hand is the same as setting the status back to
+`OPEN` in this file — but that does *not* clear `blocker_reason`, so prefer
+the web console's Reopen when the task was blocked by the agent.
 
 ## Oldest-first ordering
 

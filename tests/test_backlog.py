@@ -75,6 +75,57 @@ async def test_update_status_unknown_id_returns_none(tmp_path):
     assert await backlog.update_status("MISSING", TaskStatus.COMPLETED) is None
 
 
+async def test_set_blocked_persists_reason_and_increments_count(tmp_path):
+    backlog = JSONBacklog(tmp_path / "backlog.json")
+    task = await backlog.create_task(make_task())
+    blocked = await backlog.set_blocked(task.id, ["I need a decision"])
+    assert blocked.status is TaskStatus.BLOCKED
+    assert blocked.blocker_reason == ["I need a decision"]
+    assert blocked.blocked_count == 1
+
+    blocked = await backlog.set_blocked(task.id, ["Another decision"])
+    assert blocked.blocked_count == 2
+    assert blocked.blocker_reason == ["Another decision"]
+
+    stored = await backlog.get_task(task.id)
+    assert stored.status is TaskStatus.BLOCKED
+    assert stored.blocker_reason == ["Another decision"]
+    assert stored.blocked_count == 2
+    assert stored.updated_at >= task.updated_at
+
+    disk = json.loads((tmp_path / "backlog.json").read_text(encoding="utf-8"))
+    entry = disk["tasks"][0]
+    assert entry["blocker_reason"] == ["Another decision"]
+    assert entry["blocked_count"] == 2
+
+
+async def test_set_blocked_unknown_id_returns_none(tmp_path):
+    backlog = JSONBacklog(tmp_path / "backlog.json")
+    await backlog.create_task(make_task())
+    assert await backlog.set_blocked("MISSING", ["?"]) is None
+
+
+async def test_reopen_task_clears_reason_keeps_count(tmp_path):
+    backlog = JSONBacklog(tmp_path / "backlog.json")
+    task = await backlog.create_task(make_task())
+    await backlog.set_blocked(task.id, ["I need a decision"])
+    reopened = await backlog.reopen_task(task.id)
+    assert reopened.status is TaskStatus.OPEN
+    assert reopened.blocker_reason == []
+    assert reopened.blocked_count == 1
+
+    stored = await backlog.get_task(task.id)
+    assert stored.status is TaskStatus.OPEN
+    assert stored.blocker_reason == []
+    assert stored.blocked_count == 1
+
+
+async def test_reopen_task_unknown_id_returns_none(tmp_path):
+    backlog = JSONBacklog(tmp_path / "backlog.json")
+    await backlog.create_task(make_task())
+    assert await backlog.reopen_task("MISSING") is None
+
+
 async def test_delete_task_removes_from_backlog(tmp_path):
     backlog = JSONBacklog(tmp_path / "backlog.json")
     task = await backlog.create_task(make_task())
@@ -194,6 +245,10 @@ async def test_update_task_unknown_field_raises(tmp_path):
     task = await backlog.create_task(make_task())
     with pytest.raises(ValueError, match="unknown task field"):
         await backlog.update_task(task.id, {"status": "COMPLETED"})
+    with pytest.raises(ValueError, match="unknown task field"):
+        await backlog.update_task(task.id, {"blocker_reason": ["x"]})
+    with pytest.raises(ValueError, match="unknown task field"):
+        await backlog.update_task(task.id, {"blocked_count": 1})
     with pytest.raises(ValueError, match="unknown task field"):
         await backlog.update_task(task.id, {"bogus": 1})
 

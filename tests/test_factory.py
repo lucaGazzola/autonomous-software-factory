@@ -89,7 +89,7 @@ async def test_task_error_is_failed_and_work_discarded(git_repo, tmp_path):
     assert "def answer()" in (git_repo / "app.py").read_text(encoding="utf-8")
 
 
-async def test_task_blocked_writes_blocker_file_and_pauses(git_repo, tmp_path):
+async def test_task_blocked_persists_reason_and_renders_blocker_file(git_repo, tmp_path):
     forgeo, agent, backlog = make_forgeo(git_repo, tmp_path)
     await backlog.create_task(make_task(description="Decide the retry policy."))
     agent.result = ExecutionResult(
@@ -100,12 +100,51 @@ async def test_task_blocked_writes_blocker_file_and_pauses(git_repo, tmp_path):
 
     await forgeo.run_cycle()
 
-    assert (await backlog.get_task("TASK-001")).status is TaskStatus.BLOCKED
+    task = await backlog.get_task("TASK-001")
+    assert task.status is TaskStatus.BLOCKED
+    assert task.blocker_reason == ["Which retry policy should I use?"]
+    assert task.blocked_count == 1
+    assert not forgeo.config.blocker_file.exists()  # derived view renders next cycle
+    assert git(git_repo, "log", "-1", "--format=%s") == "forgeo: Do the thing (#TASK-001) [partial]"
+
+    assert await forgeo.run_cycle() == "blocked"
     blocker = forgeo.config.blocker_file.read_text(encoding="utf-8")
     assert "TASK-001" in blocker
     assert "Which retry policy should I use?" in blocker
     assert "set the status of `TASK-001` back to `OPEN`" in blocker
-    assert git(git_repo, "log", "-1", "--format=%s") == "forgeo: Do the thing (#TASK-001) [partial]"
+    assert "see the backlog" not in blocker
+
+
+async def test_task_blocked_falls_back_to_output_logs(git_repo, tmp_path):
+    forgeo, agent, backlog = make_forgeo(git_repo, tmp_path)
+    await backlog.create_task(make_task())
+    agent.result = ExecutionResult(
+        status=ExecutionStatus.BLOCKED,
+        output_logs=["context line", "I need a decision"],
+    )
+
+    await forgeo.run_cycle()
+
+    task = await backlog.get_task("TASK-001")
+    assert task.blocker_reason == ["context line", "I need a decision"]
+    await forgeo.run_cycle()
+    blocker = forgeo.config.blocker_file.read_text(encoding="utf-8")
+    assert "I need a decision" in blocker
+
+
+async def test_task_blocked_increments_blocked_count(git_repo, tmp_path):
+    forgeo, agent, backlog = make_forgeo(git_repo, tmp_path)
+    await backlog.create_task(make_task())
+    agent.result = ExecutionResult(status=ExecutionStatus.BLOCKED, questions=["again?"])
+
+    await forgeo.run_cycle()
+    await backlog.reopen_task("TASK-001")
+    await forgeo.run_cycle()
+
+    task = await backlog.get_task("TASK-001")
+    assert task.status is TaskStatus.BLOCKED
+    assert task.blocked_count == 2
+    assert task.blocker_reason == ["again?"]
 
 
 async def test_blocked_task_pauses_until_reopened(git_repo, tmp_path):
@@ -115,13 +154,42 @@ async def test_blocked_task_pauses_until_reopened(git_repo, tmp_path):
     await forgeo.run_cycle()
     assert await forgeo.run_cycle() == "blocked"
 
-    await backlog.update_status("TASK-001", TaskStatus.OPEN)
+    reopened = await backlog.reopen_task("TASK-001")
+    assert reopened.status is TaskStatus.OPEN
+    assert reopened.blocker_reason == []
+    assert reopened.blocked_count == 1
+
     agent.result = ExecutionResult(status=ExecutionStatus.SUCCESS)
     agent.effect = lambda: (git_repo / "note.txt").write_text("done\n", encoding="utf-8")
     await forgeo.run_cycle()
 
     assert (await backlog.get_task("TASK-001")).status is TaskStatus.COMPLETED
     assert not forgeo.config.blocker_file.exists()
+
+
+async def test_derived_blocker_disappears_when_last_blocked_resolved(git_repo, tmp_path):
+    forgeo, agent, backlog = make_forgeo(git_repo, tmp_path)
+    await backlog.create_task(make_task())
+    agent.result = ExecutionResult(status=ExecutionStatus.BLOCKED, questions=["Q?"])
+    await forgeo.run_cycle()
+    await forgeo.run_cycle()
+    assert forgeo.config.blocker_file.exists()
+
+    await backlog.reopen_task("TASK-001")
+    agent.result = ExecutionResult(status=ExecutionStatus.SUCCESS)
+    agent.effect = lambda: (git_repo / "note.txt").write_text("done\n", encoding="utf-8")
+    await forgeo.run_cycle()
+
+    assert not forgeo.config.blocker_file.exists()
+    assert (await backlog.get_task("TASK-001")).status is TaskStatus.COMPLETED
+
+
+async def test_stale_blocker_file_is_not_auto_removed(git_repo, tmp_path):
+    """A non-derived blocker file (stale or refactor-block) is untouched."""
+    forgeo, _agent, _backlog = make_forgeo(git_repo, tmp_path)
+    forgeo.config.blocker_file.write_text("stale", encoding="utf-8")
+    assert await forgeo.run_cycle() == "paused"
+    assert forgeo.config.blocker_file.read_text(encoding="utf-8") == "stale"
 
 
 async def test_blocked_task_sends_telegram_message(git_repo, tmp_path, monkeypatch):
@@ -195,7 +263,7 @@ async def test_telegram_failure_logs_warning_and_keeps_outcome(
 
     assert outcome == "task"
     assert (await backlog.get_task("TASK-001")).status is TaskStatus.BLOCKED
-    assert forgeo.config.blocker_file.exists()
+    assert not forgeo.config.blocker_file.exists()  # derived view renders next cycle
     assert any("Telegram notification failed" in r.message for r in caplog.records)
 
 
@@ -218,6 +286,7 @@ async def test_telegram_non_200_logs_warning_and_keeps_outcome(
 
     assert outcome == "task"
     assert (await backlog.get_task("TASK-001")).status is TaskStatus.BLOCKED
+    assert not forgeo.config.blocker_file.exists()  # derived view renders next cycle
     assert any("Telegram notification failed" in r.message for r in caplog.records)
 
 
