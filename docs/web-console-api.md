@@ -43,6 +43,16 @@ static files in `src/forgeo/web/` are served at their URL paths.
   it as-is — Forgeo retries it on its next scheduled run. `BLOCKED` tasks can
   also be **Deleted** (with confirmation), mirroring the `BLOCKER.md`
   instructions.
+
+  The board compacts itself so a large backlog never renders every task as a
+  tall card at once: once a `BLOCKED`/`COMPLETED`/`FAILED` column holds more
+  than a few tasks it collapses behind a "show …" toggle (only the `OPEN`
+  column — the actionable one — stays expanded), and every column renders at
+  most 20 of the most recent cards until its "show N more" button is clicked.
+  The header count always shows the real total, every task stays reachable by
+  expanding the column, and expanded/show-more state survives the 30-second
+  auto-refresh. This is presentation only — the task data itself is never
+  trimmed or reordered server-side.
 - `GET /style.css`, `/central/central.js`, `/central/central.css` — the
   shared dark theme and dashboard scripts (no frameworks).
 

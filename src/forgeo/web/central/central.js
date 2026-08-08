@@ -10,6 +10,16 @@
   var STATUS_ORDER = ["OPEN", "BLOCKED", "COMPLETED", "FAILED"];
   var TABS = ["backlog", "create", "logs", "runs", "blocker", "config"];
 
+  /* Board compaction: non-OPEN columns collapse behind a count + expand
+     toggle once they exceed COLLAPSE_MIN_TASKS, and every column renders at
+     most MAX_VISIBLE_PER_COLUMN cards (the most recent) until "show more" is
+     clicked. Expanded state survives the 30s auto-refresh. */
+  var COLLAPSE_MIN_TASKS = 4;
+  var MAX_VISIBLE_PER_COLUMN = 20;
+  var COLLAPSED_BY_DEFAULT = { BLOCKED: true, COMPLETED: true, FAILED: true };
+  var expandedColumns = {};
+  var showAllColumns = {};
+
   var page = document.body.dataset.page || "home";
   var match = page === "instance" ? location.pathname.match(/^\/instances\/([^/]+)\/?/) : null;
   var instanceName = match ? decodeURIComponent(match[1]) : null;
@@ -187,6 +197,116 @@
     });
   }
 
+  function createTaskCard(task, status) {
+    var card = el("article", "task");
+    card.setAttribute("tabindex", "0");
+    card.setAttribute("role", "button");
+    card.addEventListener("click", function () {
+      openModal(task, card);
+    });
+    card.addEventListener("keydown", function (event) {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        openModal(task, card);
+      }
+    });
+    var top = el("div", "task__top");
+    top.appendChild(el("span", "task__id", task.id));
+    top.appendChild(el("span", "badge badge--" + status, status));
+    card.appendChild(top);
+    card.appendChild(el("h3", "task__title", task.title));
+    if (task.description) {
+      card.appendChild(el("p", "task__desc", task.description));
+    }
+    var times = el("div", "task__times");
+    times.appendChild(timeEl("created", task.created_at));
+    times.appendChild(timeEl("updated", task.updated_at));
+    card.appendChild(times);
+    return card;
+  }
+
+  function isColumnCollapsed(status, count) {
+    return (
+      COLLAPSED_BY_DEFAULT[status] &&
+      count > COLLAPSE_MIN_TASKS &&
+      !expandedColumns[status]
+    );
+  }
+
+  function expandColumnButton(status, count, list, group) {
+    var btn = el("button", "status-col__expand", null);
+    btn.setAttribute("type", "button");
+    btn.setAttribute("aria-expanded", "false");
+    btn.appendChild(el("span", "status-col__expand-label", "show " + status.toLowerCase()));
+    btn.appendChild(el("span", "status-col__expand-count", String(count)));
+    btn.addEventListener("click", function () {
+      expandedColumns[status] = true;
+      renderColumn(list, status, group);
+    });
+    return btn;
+  }
+
+  function collapseColumnButton(status, list, group) {
+    var btn = el("button", "status-col__collapse", null);
+    btn.setAttribute("type", "button");
+    btn.setAttribute("aria-expanded", "true");
+    btn.appendChild(el("span", "status-col__collapse-label", "hide " + status.toLowerCase()));
+    btn.addEventListener("click", function () {
+      expandedColumns[status] = false;
+      showAllColumns[status] = false;
+      renderColumn(list, status, group);
+    });
+    return btn;
+  }
+
+  function showMoreButton(status, older, list, group) {
+    var btn = el("button", "status-col__more", null);
+    btn.setAttribute("type", "button");
+    btn.setAttribute("aria-expanded", "false");
+    btn.textContent = "show " + older.length + " more";
+    btn.addEventListener("click", function () {
+      showAllColumns[status] = true;
+      older.forEach(function (task) {
+        list.insertBefore(createTaskCard(task, status), btn.nextSibling);
+      });
+      if (COLLAPSED_BY_DEFAULT[status] && group.length > COLLAPSE_MIN_TASKS) {
+        list.insertBefore(collapseColumnButton(status, list, group), btn);
+      }
+      btn.parentNode.removeChild(btn);
+    });
+    return btn;
+  }
+
+  function renderColumn(list, status, group) {
+    list.textContent = "";
+    if (group.length === 0) {
+      list.appendChild(el("p", "status-col__empty", "nothing here"));
+      return;
+    }
+
+    if (isColumnCollapsed(status, group.length)) {
+      list.appendChild(expandColumnButton(status, group.length, list, group));
+      return;
+    }
+
+    var visible = group;
+    var older = [];
+    if (group.length > MAX_VISIBLE_PER_COLUMN && !showAllColumns[status]) {
+      older = group.slice(0, group.length - MAX_VISIBLE_PER_COLUMN);
+      visible = group.slice(older.length);
+    }
+
+    if (older.length > 0) {
+      list.appendChild(showMoreButton(status, older, list, group));
+    } else if (COLLAPSED_BY_DEFAULT[status] && group.length > COLLAPSE_MIN_TASKS) {
+      list.appendChild(collapseColumnButton(status, list, group));
+    }
+
+    visible.forEach(function (task) {
+      list.appendChild(createTaskCard(task, status));
+    });
+  }
+
   function renderTasks(tasks) {
     var board = document.getElementById("tab-backlog");
     var empty = document.getElementById("empty-state");
@@ -202,41 +322,8 @@
         return (t.status || "OPEN").toUpperCase() === status;
       });
       count.textContent = String(group.length);
-      list.textContent = "";
-
-      if (group.length === 0) {
-        list.appendChild(el("p", "status-col__empty", "nothing here"));
-        return;
-      }
-      hasAny = true;
-
-      group.forEach(function (task) {
-        var card = el("article", "task");
-        card.setAttribute("tabindex", "0");
-        card.setAttribute("role", "button");
-        card.addEventListener("click", function () {
-          openModal(task, card);
-        });
-        card.addEventListener("keydown", function (event) {
-          if (event.key === "Enter" || event.key === " ") {
-            event.preventDefault();
-            openModal(task, card);
-          }
-        });
-        var top = el("div", "task__top");
-        top.appendChild(el("span", "task__id", task.id));
-        top.appendChild(el("span", "badge badge--" + status, status));
-        card.appendChild(top);
-        card.appendChild(el("h3", "task__title", task.title));
-        if (task.description) {
-          card.appendChild(el("p", "task__desc", task.description));
-        }
-        var times = el("div", "task__times");
-        times.appendChild(timeEl("created", task.created_at));
-        times.appendChild(timeEl("updated", task.updated_at));
-        card.appendChild(times);
-        list.appendChild(card);
-      });
+      if (group.length > 0) hasAny = true;
+      renderColumn(list, status, group);
     });
 
     if (empty) empty.hidden = hasAny || tasks.length > 0;
