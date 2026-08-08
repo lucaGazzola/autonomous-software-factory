@@ -24,6 +24,12 @@ class FakeResponse:
         return False
 
 
+class FakeErrorResponse(FakeResponse):
+    """An ``urllib`` response that is not an HTTP 200."""
+
+    status = 503
+
+
 async def test_task_success_is_committed_on_main(git_repo, tmp_path):
     forgeo, agent, backlog = make_forgeo(git_repo, tmp_path)
     await backlog.create_task(make_task())
@@ -190,6 +196,28 @@ async def test_telegram_failure_logs_warning_and_keeps_outcome(
     assert outcome == "task"
     assert (await backlog.get_task("TASK-001")).status is TaskStatus.BLOCKED
     assert forgeo.config.blocker_file.exists()
+    assert any("Telegram notification failed" in r.message for r in caplog.records)
+
+
+async def test_telegram_non_200_logs_warning_and_keeps_outcome(
+    git_repo, tmp_path, monkeypatch, caplog
+):
+    forgeo, agent, backlog = make_forgeo(
+        git_repo, tmp_path, telegram_bot_token="TOKEN", telegram_chat_id="CHAT"
+    )
+    await backlog.create_task(make_task())
+    agent.result = ExecutionResult(status=ExecutionStatus.BLOCKED, questions=["?"])
+
+    def fake_urlopen(request, **kwargs):
+        return FakeErrorResponse()
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+
+    with caplog.at_level(logging.WARNING):
+        outcome = await forgeo.run_cycle()
+
+    assert outcome == "task"
+    assert (await backlog.get_task("TASK-001")).status is TaskStatus.BLOCKED
     assert any("Telegram notification failed" in r.message for r in caplog.records)
 
 

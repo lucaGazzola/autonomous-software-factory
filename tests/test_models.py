@@ -106,6 +106,16 @@ def test_config_rejects_blank_network_and_mounts():
         ForgeoConfig(agent_command="x", agent_sandbox_mounts=["", "  "])
 
 
+def test_config_accepts_valid_network_and_mounts():
+    config = ForgeoConfig(
+        agent_command="x",
+        agent_sandbox_network="bridge",
+        agent_sandbox_mounts=["/run/secrets/agent"],
+    )
+    assert config.agent_sandbox_network == "bridge"
+    assert config.agent_sandbox_mounts == ["/run/secrets/agent"]
+
+
 def test_config_rejects_zero_interval():
     with pytest.raises(ValidationError):
         ForgeoConfig(agent_command="x", interval_minutes=0)

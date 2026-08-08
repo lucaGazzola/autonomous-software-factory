@@ -91,6 +91,18 @@ def web_task_id_for(tasks: list[Task]) -> str:
     return f"WEB-{highest + 1:03d}"
 
 
+def _read_json_dict(path: Path) -> dict[str, Any] | None:
+    """Read a JSON object from ``path``; ``None`` when it is missing, corrupt,
+    or not a JSON object."""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    return data
+
+
 def _daemon_state(config: ForgeoConfig | None) -> dict[str, Any] | None:
     """The daemon's persisted live state, or ``None`` when unavailable.
 
@@ -100,14 +112,7 @@ def _daemon_state(config: ForgeoConfig | None) -> dict[str, Any] | None:
     """
     if config is None:
         return None
-    state_path = Path(config.backlog).with_suffix(".state.json")
-    try:
-        data = json.loads(state_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return None
-    if not isinstance(data, dict):
-        return None
-    return data
+    return _read_json_dict(Path(config.backlog).with_suffix(".state.json"))
 
 
 def _read_tasks(config: ForgeoConfig | None) -> list[Task]:
@@ -118,11 +123,8 @@ def _read_tasks(config: ForgeoConfig | None) -> list[Task]:
     """
     if config is None:
         return []
-    try:
-        data = json.loads(Path(config.backlog).read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return []
-    if not isinstance(data, dict):
+    data = _read_json_dict(Path(config.backlog))
+    if data is None:
         return []
     tasks = data.get("tasks")
     if not isinstance(tasks, list):

@@ -33,6 +33,15 @@ from forgeo.models import ForgeoConfig
 logger = logging.getLogger(__name__)
 
 
+def _fcntl() -> Any | None:
+    """The ``fcntl`` module, or ``None`` on platforms without it (Windows)."""
+    try:
+        import fcntl
+    except ImportError:
+        return None
+    return fcntl
+
+
 def _take_flock(lock_path: str | Path) -> Any | None:
     """Open the lock file and take a non-blocking exclusive flock.
 
@@ -45,9 +54,8 @@ def _take_flock(lock_path: str | Path) -> Any | None:
     lock_file = Path(lock_path)
     lock_file.parent.mkdir(parents=True, exist_ok=True)
     handle = lock_file.open("a+")
-    try:
-        import fcntl
-    except ImportError:
+    fcntl = _fcntl()
+    if fcntl is None:
         handle.truncate(0)
         handle.write(f"pid={os.getpid()}\n")
         handle.flush()
@@ -96,9 +104,8 @@ def is_lock_held(lock_path: str | Path) -> bool:
     lock_file = Path(lock_path)
     if not lock_file.exists():
         return False
-    try:
-        import fcntl
-    except ImportError:
+    fcntl = _fcntl()
+    if fcntl is None:
         return False
     try:
         handle = lock_file.open("r")

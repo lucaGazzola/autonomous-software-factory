@@ -69,6 +69,12 @@ async def test_update_status_persists_and_bumps_timestamp(tmp_path):
     assert stored.updated_at >= task.updated_at
 
 
+async def test_update_status_unknown_id_returns_none(tmp_path):
+    backlog = JSONBacklog(tmp_path / "backlog.json")
+    await backlog.create_task(make_task())
+    assert await backlog.update_status("MISSING", TaskStatus.COMPLETED) is None
+
+
 async def test_create_duplicate_id_raises(tmp_path):
     backlog = JSONBacklog(tmp_path / "backlog.json")
     await backlog.create_task(make_task())

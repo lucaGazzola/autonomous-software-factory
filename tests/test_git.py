@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import subprocess
+
 import pytest
 
 from forgeo.git import GitError, GitManager
@@ -51,3 +53,21 @@ async def test_not_a_repository_raises(tmp_path):
     manager = GitManager(tmp_path)
     with pytest.raises(GitError):
         await manager.a_ensure_branch("main")
+
+
+def test_missing_git_executable_raises(git_repo, monkeypatch):
+    manager = GitManager(git_repo)
+    monkeypatch.setattr("forgeo.git.shutil.which", lambda _: None)
+    with pytest.raises(GitError, match="git"):
+        manager.is_clean()
+
+
+def test_git_timeout_raises(git_repo, monkeypatch):
+    manager = GitManager(git_repo, timeout_seconds=0.01)
+
+    def slow_run(*args, **kwargs):
+        raise subprocess.TimeoutExpired(cmd="git", timeout=0.01)
+
+    monkeypatch.setattr("forgeo.git.subprocess.run", slow_run)
+    with pytest.raises(GitError, match="timed out"):
+        manager._run("status", "--porcelain")

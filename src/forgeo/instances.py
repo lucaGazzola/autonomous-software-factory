@@ -1,7 +1,7 @@
 """Instance registry: a stable name for every configured forgeo.
 
 Each forgeo is configured by its own ``forgeo.yaml`` and runs as its own
-daemon process, but nothing on the host knows how many factories exist or
+daemon process, but nothing on the host knows how many forgeos exist or
 how to find their configs. The registry gives every forgeo a unique name
 mapped to the absolute path of its ``forgeo.yaml``, so the CLI can resolve
 a config by name and a single command can enumerate every forgeo.

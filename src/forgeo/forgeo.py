@@ -47,7 +47,7 @@ def _execution_outcome(status: ExecutionStatus) -> RunOutcome:
         ExecutionStatus.SUCCESS: RunOutcome.SUCCESS,
         ExecutionStatus.BLOCKED: RunOutcome.BLOCKED,
         ExecutionStatus.ERROR: RunOutcome.ERROR,
-    }[status]
+    }.get(status, RunOutcome.ERROR)
 
 
 def _subject_label(task: Task, *, is_refactor: bool) -> str:
@@ -148,18 +148,18 @@ class Forgeo:
     def _record_run(self, outcome: str, started_at: datetime) -> None:
         """Build and append the run record for a completed cycle."""
         finished_at = datetime.now(UTC)
-        duration = round((finished_at - started_at).total_seconds(), 3)
+        task = self._cycle_task(outcome)
         self.recorder.append(
             RunRecord(
                 started_at=started_at,
                 finished_at=finished_at,
                 kind=self._run_kind(outcome),
-                task_id=self._run_task_id(outcome),
-                task_title=self._run_task_title(outcome),
+                task_id=task.id if task is not None else None,
+                task_title=task.title if task is not None else None,
                 outcome=self._run_outcome(outcome),
                 agent_exit_code=self._run_exit_code(outcome),
                 commit_sha=self._last_commit_sha if outcome in ("task", "refactor") else None,
-                duration_seconds=duration,
+                duration_seconds=round((finished_at - started_at).total_seconds(), 3),
             )
         )
 
@@ -177,14 +177,6 @@ class Forgeo:
         if outcome == "blocked":
             return self._blocked_tasks[0] if self._blocked_tasks else None
         return None
-
-    def _run_task_id(self, outcome: str) -> str | None:
-        task = self._cycle_task(outcome)
-        return task.id if task is not None else None
-
-    def _run_task_title(self, outcome: str) -> str | None:
-        task = self._cycle_task(outcome)
-        return task.title if task is not None else None
 
     def _run_outcome(self, outcome: str) -> RunOutcome:
         if outcome in ("task", "refactor"):

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import pathlib
 from datetime import UTC, datetime
 
 from forgeo.models import (
@@ -149,6 +150,28 @@ def test_read_missing_file_returns_empty(tmp_path):
     assert recorder.read_last() is None
 
 
+def test_append_failure_is_logged_not_raised(tmp_path, caplog, monkeypatch):
+    """A write failure must never break a Forgeo cycle."""
+    recorder = RunRecorder(tmp_path / "runs.jsonl")
+    record = RunRecord(
+        started_at=datetime(2026, 8, 1, tzinfo=UTC),
+        finished_at=datetime(2026, 8, 1, 0, 0, 10, tzinfo=UTC),
+        kind=RunKind.TASK,
+        outcome=RunOutcome.SUCCESS,
+        duration_seconds=1.0,
+    )
+
+    def boom(*args, **kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(pathlib.Path, "open", boom)
+    with caplog.at_level(logging.ERROR, logger="forgeo.runs"):
+        recorder.append(record)
+
+    assert "Could not write run record" in caplog.text
+    assert not recorder.path.exists()
+
+
 def test_read_returns_newest_first(tmp_path):
     recorder = RunRecorder(tmp_path / "runs.jsonl")
     older = RunRecord(
@@ -189,6 +212,7 @@ def test_read_skips_corrupt_lines_with_warning(tmp_path, caplog):
         )
     )
     with recorder.path.open("a", encoding="utf-8") as handle:
+        handle.write("\n")
         handle.write("{not json\n")
         handle.write('{"started_at": "broken"\n')
 

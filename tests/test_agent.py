@@ -4,10 +4,17 @@ from __future__ import annotations
 
 import os
 import sys
+import types
+from collections import deque
 
 import pytest
 
-from forgeo.agent import DockerSandboxAgent, SandboxUnavailableError, ShellAgent
+from forgeo.agent import (
+    DockerSandboxAgent,
+    SandboxUnavailableError,
+    ShellAgent,
+    _kill_process_group,
+)
 from forgeo.models import ExecutionStatus, RepoContext
 from tests.conftest import make_task
 
@@ -342,3 +349,73 @@ async def test_docker_accepts_argv_list_command(monkeypatch):
     args = captured["args"]
     assert args[-2:] == ["opencode", "run"]
     assert "sh" not in args
+
+
+def test_kill_process_group_falls_back_when_group_gone(monkeypatch):
+    """When the process group is already gone, the direct child still dies."""
+    proc = types.SimpleNamespace(pid=123)
+
+    def fake_killpg(pid, sig):
+        raise ProcessLookupError
+
+    proc.kill = lambda: setattr(proc, "killed", True)
+    monkeypatch.setattr("forgeo.agent.os.killpg", fake_killpg)
+
+    _kill_process_group(proc)
+
+    assert getattr(proc, "killed", False) is True
+
+
+async def test_drain_stream_none_is_noop():
+    """A missing stream (no stderr) is skipped without error."""
+    lines = deque()
+    await ShellAgent._drain_stream(None, "stderr", lines)
+    assert lines == deque()
+
+
+class _HangingStream:
+    """A stream that never reaches EOF (as if a daemonized grandchild held it)."""
+
+    async def readline(self) -> bytes:
+        import asyncio
+
+        await asyncio.sleep(3600)
+        return b""
+
+
+class _HangingProcess(_FakeProcess):
+    """An exit-0 process whose output streams never finish."""
+
+    def __init__(self) -> None:
+        self.returncode = 0
+        self.stdout = _HangingStream()
+        self.stderr = _HangingStream()
+
+
+async def test_drain_timeout_proceeds_without_hanging():
+    """Streams that never reach EOF must not hang the run; the run succeeds."""
+    agent = ShellAgent("true", drain_timeout_seconds=0.2)
+
+    async def fake_spawn(*args, **kwargs):
+        return _HangingProcess()
+
+    agent._spawn = fake_spawn  # type: ignore[method-assign]
+
+    result = await agent.run_task(TASK, RepoContext())
+
+    assert result.status is ExecutionStatus.SUCCESS
+    assert any("Output streams stayed open" in line for line in result.output_logs)
+
+
+def test_kill_process_group_sends_sigkill(monkeypatch):
+    """The whole process group receives SIGKILL, not just the child."""
+    proc = types.SimpleNamespace(pid=456)
+    seen: list = []
+    monkeypatch.setattr(
+        "forgeo.agent.os.killpg",
+        lambda pid, sig: seen.append((pid, sig)),
+    )
+
+    _kill_process_group(proc)
+
+    assert seen == [(456, 9)]
