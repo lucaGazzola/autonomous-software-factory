@@ -22,6 +22,8 @@ Routes:
 * ``PATCH /api/instances/<name>/tasks/<id>`` — update an existing task's
   editable fields (title, description, acceptance criteria, dependencies,
   files to modify, agent command, agent timeout).
+* ``DELETE /api/instances/<name>/tasks/<id>`` — delete an ``OPEN`` task from
+  that instance's backlog.
 
 An unknown instance name returns ``404``; a registered instance with missing
 data files renders with empty data and ``daemon_running=false`` rather than
@@ -335,6 +337,18 @@ def make_handler() -> type[BaseHTTPRequestHandler]:
                 return
             self._send_json(404, {"error": "not found"})
 
+        def do_DELETE(self) -> None:
+            self._run_safely(self._do_delete)
+
+        def _do_delete(self) -> None:
+            parsed = urlparse(self.path)
+            path = parsed.path
+
+            if path.startswith("/api/instances/"):
+                self._delete_instance_task(path)
+                return
+            self._send_json(404, {"error": "not found"})
+
         def _read_json_body(self) -> dict[str, Any] | None:
             """Read and parse the request body as a JSON object.
 
@@ -463,6 +477,29 @@ def make_handler() -> type[BaseHTTPRequestHandler]:
                 self._send_json(404, {"error": "not found"})
                 return
             self._send_json(200, updated.model_dump(mode="json"))
+
+        def _delete_instance_task(self, path: str) -> None:
+            """Delete an OPEN task from an instance's backlog."""
+            target = self._resolve_task_target(path, with_task_id=True)
+            if target is None:
+                return
+            config, task_id = target
+            assert task_id is not None  # with_task_id=True resolves a task id
+
+            backlog = JSONBacklog(config.backlog)
+            task = asyncio.run(backlog.get_task(task_id))
+            if task is None:
+                self._send_json(404, {"error": "not found"})
+                return
+            if task.status is not TaskStatus.OPEN:
+                self._send_json(
+                    400,
+                    {"error": "only OPEN tasks can be deleted"},
+                )
+                return
+            deleted = asyncio.run(backlog.delete_task(task_id))
+            assert deleted is not None  # task was just found in the backlog
+            self._send_json(200, deleted.model_dump(mode="json"))
 
         def _handle_instance_page(self, path: str) -> None:
             name = unquote(path[len("/instances/") :]).strip("/")

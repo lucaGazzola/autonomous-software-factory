@@ -97,6 +97,27 @@ class JSONBacklog:
             await self._write(store)
         return updated
 
+    async def delete_task(self, task_id: str) -> Task | None:
+        """Remove a task from the backlog, returning the deleted task.
+
+        An unknown ``task_id`` returns ``None`` without writing anything.
+        Any other callers wishing to restrict deletion (e.g. only ``OPEN``
+        tasks) must check the status before calling; this method deletes
+        whatever is there. Writes go through the same lock and atomic-replace
+        path as the other mutators.
+        """
+        async with self._lock:
+            store = await self._read()
+            entry = self._entry_by_id(store, task_id)
+            if entry is None:
+                return None
+            store["tasks"] = [
+                task for task in store["tasks"] if task["id"] != task_id
+            ]
+            deleted = self._to_task(entry)
+            await self._write(store)
+        return deleted
+
     async def update_task(
         self, task_id: str, updates: dict[str, Any]
     ) -> Task | None:

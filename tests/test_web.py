@@ -79,6 +79,23 @@ def _patch(url: str, data: str | None) -> tuple[int, dict | list | str]:
             return exc.code, resp_body
 
 
+def _delete(url: str) -> tuple[int, dict | list | str]:
+    request = urllib.request.Request(url, method="DELETE")
+    try:
+        with urllib.request.urlopen(request, timeout=5) as resp:
+            resp_body = resp.read().decode("utf-8")
+            ctype = resp.headers.get_content_type()
+            if ctype == "application/json":
+                return resp.status, json.loads(resp_body)
+            return resp.status, resp_body
+    except urllib.error.HTTPError as exc:
+        resp_body = exc.read().decode("utf-8")
+        try:
+            return exc.code, json.loads(resp_body)
+        except json.JSONDecodeError:
+            return exc.code, resp_body
+
+
 def task_json(task_id: str, title: str, status: TaskStatus) -> dict:
     return make_task(
         id=task_id,
@@ -243,6 +260,7 @@ def test_instance_page_has_task_edit_modal(web_env):
     status, body = _get(f"http://127.0.0.1:{server.port}/instances/alpha/")
     assert status == 200
     assert 'id="task-modal-edit"' in body
+    assert 'id="task-modal-delete"' in body
     assert 'id="task-modal-edit-form"' in body
     assert 'id="task-modal-save"' in body
     assert 'id="task-modal-cancel"' in body
@@ -661,6 +679,88 @@ def test_patch_task_wrong_path_404(web_env):
         json.dumps({"title": "x"}),
     )
     assert status == 404
+
+
+def test_delete_task_removes_open_task(web_env):
+    server, registry = web_env
+    url = f"http://127.0.0.1:{server.port}/api/instances/alpha/tasks/TASK-001"
+    _, before = _get(url)
+    status, data = _delete(url)
+    assert status == 200
+    assert data["id"] == before["id"]
+    assert data["title"] == before["title"]
+
+    status, tasks = _get(f"http://127.0.0.1:{server.port}/api/instances/alpha/tasks")
+    assert status == 200
+    assert [t["id"] for t in tasks] == ["TASK-002"]
+
+    disk = json.loads(
+        (registry / "alpha" / "backlog.json").read_text(encoding="utf-8")
+    )
+    assert [entry["id"] for entry in disk["tasks"]] == ["TASK-002"]
+
+
+def test_delete_task_keeps_other_instances(web_env):
+    server, _ = web_env
+    url = f"http://127.0.0.1:{server.port}/api/instances/alpha/tasks/TASK-001"
+    status, _ = _delete(url)
+    assert status == 200
+    status, tasks = _get(f"http://127.0.0.1:{server.port}/api/instances/beta/tasks")
+    assert status == 200
+    assert [t["id"] for t in tasks] == ["B-1"]
+
+
+def test_delete_task_non_open_400(web_env):
+    server, _ = web_env
+    url = f"http://127.0.0.1:{server.port}/api/instances/alpha/tasks/TASK-002"
+    status, data = _delete(url)
+    assert status == 400
+    assert data["error"] == "only OPEN tasks can be deleted"
+
+    status, tasks = _get(f"http://127.0.0.1:{server.port}/api/instances/alpha/tasks")
+    assert status == 200
+    assert [t["id"] for t in tasks] == ["TASK-001", "TASK-002"]
+
+
+def test_delete_task_unknown_id_404(web_env):
+    server, _ = web_env
+    status, data = _delete(
+        f"http://127.0.0.1:{server.port}/api/instances/alpha/tasks/MISSING"
+    )
+    assert status == 404
+    assert data["error"] == "not found"
+
+
+def test_delete_task_unknown_instance_404(web_env):
+    server, _ = web_env
+    status, data = _delete(
+        f"http://127.0.0.1:{server.port}/api/instances/nope/tasks/TASK-001"
+    )
+    assert status == 404
+    assert data["error"] == "unknown instance"
+
+
+def test_delete_task_wrong_path_404(web_env):
+    server, _ = web_env
+    status, data = _delete(f"http://127.0.0.1:{server.port}/api/instances/alpha/bogus")
+    assert status == 404
+    assert data["error"] == "not found"
+
+
+def test_do_delete_returns_500_on_unexpected_error(web_env, monkeypatch):
+    import forgeo.central as central_module
+
+    server, _ = web_env
+
+    def boom(name: str) -> None:
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(central_module, "get_instance", boom)
+    status, data = _delete(
+        f"http://127.0.0.1:{server.port}/api/instances/alpha/tasks/TASK-001"
+    )
+    assert status == 500
+    assert data["error"] == "internal server error"
 
 
 def test_web_task_id_for():

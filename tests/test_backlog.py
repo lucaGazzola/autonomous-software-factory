@@ -75,6 +75,36 @@ async def test_update_status_unknown_id_returns_none(tmp_path):
     assert await backlog.update_status("MISSING", TaskStatus.COMPLETED) is None
 
 
+async def test_delete_task_removes_from_backlog(tmp_path):
+    backlog = JSONBacklog(tmp_path / "backlog.json")
+    task = await backlog.create_task(make_task())
+    deleted = await backlog.delete_task(task.id)
+    assert deleted.id == task.id
+    assert deleted.title == task.title
+    assert await backlog.list_tasks() == []
+    assert await backlog.get_task(task.id) is None
+    disk = json.loads((tmp_path / "backlog.json").read_text(encoding="utf-8"))
+    assert disk["tasks"] == []
+
+
+async def test_delete_task_keeps_other_tasks(tmp_path):
+    backlog = JSONBacklog(tmp_path / "backlog.json")
+    keep = await backlog.create_task(make_task(id="KEEP"))
+    await backlog.create_task(make_task(id="GONE"))
+    deleted = await backlog.delete_task("GONE")
+    assert deleted.id == "GONE"
+    remaining = await backlog.list_tasks()
+    assert [task.id for task in remaining] == ["KEEP"]
+    assert remaining[0].model_dump(mode="json") == keep.model_dump(mode="json")
+
+
+async def test_delete_task_unknown_id_returns_none(tmp_path):
+    backlog = JSONBacklog(tmp_path / "backlog.json")
+    await backlog.create_task(make_task())
+    assert await backlog.delete_task("MISSING") is None
+    assert len(await backlog.list_tasks()) == 1
+
+
 async def test_create_duplicate_id_raises(tmp_path):
     backlog = JSONBacklog(tmp_path / "backlog.json")
     await backlog.create_task(make_task())

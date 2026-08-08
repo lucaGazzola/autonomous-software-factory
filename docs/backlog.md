@@ -80,8 +80,10 @@ You add, remove, or reopen tasks by editing the file directly — or use the
 [web console](web-console-api.md): the **new-task form** (`POST
 /api/instances/<name>/tasks`) assigns the next free `WEB-###` id for you, and
 the task detail modal's **Edit** button updates an existing task's fields
-(`PATCH /api/instances/<name>/tasks/<id>`). To retry a `BLOCKED` task, set its
-status back to `OPEN` — Forgeo picks it up on the next scheduled run.
+(`PATCH /api/instances/<name>/tasks/<id>`), while its **Delete** button
+removes an `OPEN` task (`DELETE /api/instances/<name>/tasks/<id>`). To retry
+a `BLOCKED` task, set its status back to `OPEN` — Forgeo picks it up on the
+next scheduled run.
 
 ## Oldest-first ordering
 

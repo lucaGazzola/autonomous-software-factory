@@ -304,6 +304,18 @@
   color: var(--accent);
 }
 
+.modal__btn--danger {
+  background: rgba(255, 92, 92, 0.08);
+  border-color: rgba(255, 92, 92, 0.35);
+  color: var(--failed);
+}
+
+.modal__btn--danger:hover {
+  background: rgba(255, 92, 92, 0.18);
+  border-color: var(--failed);
+  color: var(--failed);
+}
+
 .modal__edit {
   display: flex;
   flex-direction: column;

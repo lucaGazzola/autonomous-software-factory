@@ -172,6 +172,27 @@ Errors:
 - `404` with `{"error": "unknown instance"}` — the instance is not
   registered.
 
+### `DELETE /api/instances/<name>/tasks/{id}`
+
+Delete an `OPEN` task from that instance's backlog (e.g. a task added by
+mistake). Only `OPEN` tasks can be deleted — a task that was already picked
+up stays in the record.
+
+```bash
+curl -X DELETE http://127.0.0.1:8790/api/instances/my-repo/tasks/TASK-001
+```
+
+Returns `200` with the deleted task. The write is atomic (temp file +
+rename), so it is safe even while that instance's daemon is mid-cycle.
+Errors:
+
+- `400` with `{"error": "only OPEN tasks can be deleted"}` — the task exists
+  but is not `OPEN` (it is untouched).
+- `404` with `{"error": "not found"}` — the task id does not exist in that
+  instance's backlog.
+- `404` with `{"error": "unknown instance"}` — the instance is not
+  registered.
+
 ### `GET /api/instances/<name>/status`
 
 Daemon status: name, repo, interval, `daemon_running` (whether the instance's
@@ -245,14 +266,15 @@ curl http://127.0.0.1:8790/api/instances/my-repo/blocker
 - A registered instance with missing data files renders with empty data and
   `daemon_running=false` instead of erroring — the instance page and every
   API endpoint still return `200`.
-- The write endpoints are `POST /api/instances/<name>/tasks` (append a task)
-  and `PATCH /api/instances/<name>/tasks/<id>` (update a task's editable
-  fields).
+- The write endpoints are `POST /api/instances/<name>/tasks` (append a task),
+  `PATCH /api/instances/<name>/tasks/<id>` (update a task's editable fields),
+  and `DELETE /api/instances/<name>/tasks/<id>` (delete an `OPEN` task).
 
 ## Errors
 
 - `400` — malformed `POST`/`PATCH` body (missing/blank title, unparseable
-  body, wrong field types, unknown fields).
+  body, wrong field types, unknown fields), or `DELETE` of a task that is
+  not `OPEN`.
 - `404` — unknown API path, unknown instance, unknown task, or missing
   static file.
 - `409` — `POST` id collision (a concurrent request won the race).
@@ -271,5 +293,7 @@ curl -s http://127.0.0.1:8790/api/instances/my-repo/status
   interface) makes every instance's backlog, logs, and config visible to
   every host that can reach the port — only do that on a trusted network.
 - The write endpoints are `POST /api/instances/<name>/tasks` and `PATCH
-  /api/instances/<name>/tasks/<id>`. A machine that can reach the port can
-  add tasks to any instance's queue and edit their fields.
+  /api/instances/<name>/tasks/<id>` (and `DELETE
+  /api/instances/<name>/tasks/<id>` for open tasks). A machine that can reach
+  the port can add tasks to any instance's queue, edit their fields, and
+  delete open ones.

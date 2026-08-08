@@ -283,6 +283,11 @@
 
     showModalSection("task-modal-edit", (task.status || "OPEN") === "OPEN");
 
+    var deleteBtn = document.getElementById("task-modal-delete");
+    if (deleteBtn) {
+      deleteBtn.hidden = (task.status || "OPEN") !== "OPEN";
+    }
+
     setText("task-modal-description", task.description || "");
     var acceptance = document.getElementById("task-modal-acceptance");
     if (acceptance) {
@@ -362,6 +367,8 @@
     showModalSection("task-modal-view", false);
     showModalSection("task-modal-edit-form", true);
     showModalSection("task-modal-edit", false);
+    var deleteBtn = document.getElementById("task-modal-delete");
+    if (deleteBtn) deleteBtn.hidden = true;
     var error = document.getElementById("task-modal-error");
     if (error) error.hidden = true;
   }
@@ -370,6 +377,10 @@
     showModalSection("task-modal-view", true);
     showModalSection("task-modal-edit-form", false);
     showModalSection("task-modal-edit", true);
+    var deleteBtn = document.getElementById("task-modal-delete");
+    if (deleteBtn && modalTask) {
+      deleteBtn.hidden = (modalTask.status || "OPEN") !== "OPEN";
+    }
     var error = document.getElementById("task-modal-error");
     if (error) error.hidden = true;
   }
@@ -444,10 +455,44 @@
       });
   }
 
+  function deleteTask() {
+    if (!API || !modalTaskId) return;
+    if (!window.confirm("Delete this OPEN task? This cannot be undone.")) return;
+    var error = document.getElementById("task-modal-delete-error");
+    if (error) error.hidden = true;
+
+    fetch(API + "tasks/" + encodeURIComponent(modalTaskId), {
+      method: "DELETE",
+    })
+      .then(function (resp) {
+        if (!resp.ok) {
+          return resp.json().then(function (data) {
+            throw new Error((data && data.error) || "HTTP " + resp.status);
+          });
+        }
+        return resp.json();
+      })
+      .then(function () {
+        closeModal();
+        return fetchJSON(API + "tasks");
+      })
+      .then(function (tasks) {
+        renderTasks(tasks || []);
+      })
+      .catch(function (err) {
+        if (error) {
+          error.textContent = err.message || "failed to delete task";
+          error.hidden = false;
+        }
+      });
+  }
+
   function openModal(task, opener) {
     if (!task) return;
     modalTaskId = task.id;
     modalLastFocus = opener || document.activeElement;
+    var deleteError = document.getElementById("task-modal-delete-error");
+    if (deleteError) deleteError.hidden = true;
     exitEditMode();
     renderModal(task);
     var modal = document.getElementById("task-modal");
@@ -737,6 +782,8 @@
       if (closeBtn) closeBtn.addEventListener("click", closeModal);
       var editBtn = document.getElementById("task-modal-edit");
       if (editBtn) editBtn.addEventListener("click", enterEditMode);
+      var deleteBtn = document.getElementById("task-modal-delete");
+      if (deleteBtn) deleteBtn.addEventListener("click", deleteTask);
       var cancelBtn = document.getElementById("task-modal-cancel");
       if (cancelBtn) cancelBtn.addEventListener("click", exitEditMode);
       var editForm = document.getElementById("task-modal-edit-form");
